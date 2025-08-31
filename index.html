@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-    /* ChatGPT dark-ish palette */
+    /* ChatGPT-ish dark palette */
     --bg:#0F1115;        /* app background */
     --panel:#13161A;     /* panels/cards */
     --canvas:#0E1116;    /* video/canvas surface */
@@ -41,7 +41,7 @@
   .ctl label{color:var(--muted);font-size:13px}
 
   .row-inline{display:flex;align-items:center;gap:10px}
-  /* make Box/Line/Text titles look identical to other labels */
+  /* Make Box/Line/Text titles match other labels */
   .row-inline .ttl{color:var(--muted);font-size:13px;min-width:40px}
 
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
@@ -49,7 +49,7 @@
   input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip);cursor:pointer}
   input[type="text"].hex{flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg)}
   .checkline{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
-  /* and unify “Show …” label style too */
+  /* Unify “Show …” labels as well */
   .checkline label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
 
   .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
@@ -169,7 +169,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     boxThickVal:$('#boxThickVal'), lineWidthVal:$('#lineWidthVal'), textSizeVal:$('#textSizeVal'),
   };
 
-  // badges + handlers
   Object.entries(c).forEach(([k,el])=>{
     if(el?.type==='range'){
       const map={trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal'};
@@ -182,7 +181,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // colors binding
+  // color pickers
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -221,7 +220,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
 
-  /* mirror flag: true when using live camera */
+  /* mirror flag: true when using live camera (preview is flipped).
+     IMPORTANT: processing always uses the UNFLIPPED frame. */
   let mirror=false;
 
   // color conversion const
@@ -252,16 +252,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
 
+  /* Grab into src WITHOUT mirroring (processing stays normal) */
   function grabToSrc(){
     if(!src) return false;
-    // draw into processing buffer (mirrored if needed)
-    if(mirror){
-      bctx.save(); bctx.scale(-1,1);
-      bctx.drawImage(video, -procW, 0, procW, procH);
-      bctx.restore();
-    }else{
-      bctx.drawImage(video,0,0,procW,procH);
-    }
+    bctx.drawImage(video,0,0,procW,procH);
     const im=bctx.getImageData(0,0,procW,procH);
     src.data.set(im.data);
     return true;
@@ -272,12 +266,13 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // background (mirrored if camera)
+    // draw background (mirrored if camera)
     ctx.save();
     if(mirror){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
     ctx.restore();
 
+    // helper to flip X so overlays match mirrored preview
     const X = x => mirror ? (canvas.width - x) : x;
 
     // boxes
@@ -418,8 +413,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     try{
       if(stream){ stream.getTracks().forEach(t=>t.stop()); }
       const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:'user'},audio:false});
-      stream=s; mirror = true;             // mirror live camera like a selfie preview
-      video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started (mirrored)');
+      stream=s; mirror = true;             // PREVIEW mirrored; processing stays normal
+      video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started (mirrored preview)');
     }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
   };
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
@@ -554,7 +549,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     return new Promise(resolve=>{
       setStatus('Saving… 0%');
       let i = 0;
-      const step = (_,meta) => {
+      const step = () => {
         if (video.ended) { resolve(); return; }
         ensureMats();
         if (!grabToSrc()) { resolve(); return; }
