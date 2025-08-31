@@ -2,21 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Blob Tracking</title>
+<title>Blob Tracking (Deterministic Export)</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  :root{
-    --bg:#121016; --panel:#171320; --canvas:#15121c;
-    --fg:#efe9ff; --muted:#cfc6e6; --line:#2b2240;
-    --accent:#c084fc; --chip:#1a1526;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%}
+  :root{--bg:#121016;--panel:#171320;--canvas:#15121c;--fg:#efe9ff;--muted:#cfc6e6;--line:#2b2240;--accent:#c084fc;--chip:#1a1526}
+  *{box-sizing:border-box} html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
   header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
   h1{margin:0;font-size:18px}
   #stageWrap{padding:12px 16px 84px}
-  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
+  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw)}
   video,#buf{display:none}
 
   .controls{padding:10px 16px}
@@ -28,8 +23,7 @@
   input[type="text"].hex{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
   .status{margin:8px 0 0;padding:8px 12px;border-radius:10px;font-size:13px;border:1px solid var(--line);background:var(--chip)}
-
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,.0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .push{flex:1}
   button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
@@ -85,25 +79,21 @@
   </div>
 </div>
 
-<!-- status helper BEFORE OpenCV -->
 <script>
 function setStatus(text){ const el=document.getElementById('status'); if(el) el.textContent=text; else console.log('[status]',text); }
 window.__cvReady=false; window.__videoReady=false;
-window.Module = {
-  onRuntimeInitialized(){ window.__cvReady=true; setStatus('OpenCV.js ready'); if(window.__videoReady && typeof window.__start==='function') window.__start(); }
-};
+window.Module = { onRuntimeInitialized(){ window.__cvReady=true; setStatus('OpenCV.js ready'); if(window.__videoReady && typeof window.__start==='function') window.__start(); } };
 </script>
 <script src="https://docs.opencv.org/4.x/opencv.js"></script>
 
-<!-- App -->
 <script type="module">
 import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
 (() => {
-  const $ = s => document.querySelector(s);
-  const canvas = $('#canvas'), ctx = canvas.getContext('2d');
-  const buf = $('#buf'), bctx = buf.getContext('2d',{willReadFrequently:true});
-  const video = $('#video'); video.muted=true; video.playsInline=true;
+  const $=s=>document.querySelector(s);
+  const canvas=$('#canvas'), ctx=canvas.getContext('2d');
+  const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
+  const video=$('#video'); video.muted=true; video.playsInline=true;
 
   const c={scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
            alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
@@ -113,7 +103,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
            morphVal:$('#morphVal'),alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),
            maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal')};
 
-  // badges + handlers
   Object.entries(c).forEach(([k,el])=>{
     if(el?.type==='range'){
       const id=(k==='trailLen')?'trailVal':(k+'Val'); const badge=b[id];
@@ -125,7 +114,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // color pickers
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -137,7 +125,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const colText=$('#colText'), hexText=$('#hexText');
   bindColor(colBox,hexBox,'#00C2FF'); bindColor(colLine,hexLine,'#9CA3AF'); bindColor(colText,hexText,'#EEEEEE');
 
-  /* ---------- simple tracker ---------- */
+  /* Tracker */
   class CentroidTracker{
     constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
     register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
@@ -158,14 +146,13 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   let tracker=new CentroidTracker(+c.maxDisappear.value,+c.maxDist.value);
   c.maxDisappear.oninput=()=>tracker.maxDisappeared=+c.maxDisappear.value;
   c.maxDist.oninput=()=>tracker.maxDistance=+c.maxDist.value;
-
   const trails=new Map();
 
-  /* ---------- OpenCV & loop ---------- */
+  /* OpenCV */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
-  let COLOR_RGBA2GRAY = null;
-  function initColorConst(){ COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY==='number')?cv.COLOR_RGBA2GRAY:cv.COLOR_RGB2GRAY; }
+  let COLOR_RGBA2GRAY=null;
+  function initColorConst(){ COLOR_RGBA2GRAY=(typeof cv.COLOR_RGBA2GRAY==='number')?cv.COLOR_RGBA2GRAY:cv.COLOR_RGB2GRAY; }
 
   function cleanup(){
     cancelAnimationFrame(animId); animId=null;
@@ -173,7 +160,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     src=gray=blur=bg=diff=thr=kernel=contours=hierarchy=null;
     trails.clear();
   }
-
   function ensureMats(){
     if(!src || src.cols!==procW || src.rows!==procH){
       src && src.delete(); gray && gray.delete(); blur && blur.delete();
@@ -188,7 +174,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       contours=new cv.MatVector(); hierarchy=new cv.Mat();
     }
   }
-
   function grabToSrc(){
     if(!src) return false;
     bctx.drawImage(video,0,0,procW,procH);
@@ -196,22 +181,15 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     src.data.set(im.data);
     return true;
   }
-
   function drawOverlayFromDetections(boxes, objs, maxTrail){
-    ctx.globalCompositeOperation='source-over';
-    ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-    ctx.lineWidth=2; ctx.strokeStyle=hexBox.value;
-    boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
-
+    ctx.lineWidth=2; ctx.strokeStyle=hexBox.value; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
       const L=+c.linkDist.value; ctx.lineWidth=1.5; ctx.strokeStyle=hexLine.value;
       for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
-        const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
-        if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
+        const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y); if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
       }
     }
     if(c.showTrail.checked && maxTrail>0){
@@ -221,18 +199,15 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.font='14px ui-sans-serif,system-ui';
     for(const [id,[cx,cy]] of objs.entries()){
       ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
-      const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
+      const txt=c.showCoord.checked?`${cx.toFixed(1)}, ${cy.toFixed(1)}`:`ID ${id}`;
       ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
     }
   }
-
   function detectOnCurrentFrame(updateTracker=true){
     cv.absdiff(blur,bg,diff);
     cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
-
     const it=+c.morph.value;
     if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
-
     contours?.delete(); hierarchy?.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
     cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
 
@@ -259,19 +234,13 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       centers.forEach((p,i)=>objs.set(i,p));
       drawOverlayFromDetections(boxes, objs, 0);
     }
-
-    // update background AFTER drawing (so paused tweaks preview correctly)
-    if(!paused){
-      const a = Math.min(1,Math.max(0,+c.alpha.value/100));
-      cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
-      cv.addWeighted(bg,(1-a),blur,a,0,bg);
-    }
+    // update bg after drawing
+    cv.addWeighted(bg,(1-+c.alpha.value/100),blur,+c.alpha.value/100,0,bg);
   }
 
   function reprocessPaused(){
     if(!paused) return;
-    ensureMats();
-    if(!grabToSrc()) return;
+    ensureMats(); if(!grabToSrc()) return;
     cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
     cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
     detectOnCurrentFrame(false);
@@ -288,7 +257,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
       ensureMats(); initColorConst();
       grabToSrc(); cv.cvtColor(src,gray,COLOR_RGBA2GRAY); cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
-
       setStatus(`Running • ${vw}×${vh} (proc ${procW}×${procH})`);
       paused=false; loop();
     }catch(err){ console.error(err); setStatus('Start failed: '+err.message); }
@@ -299,8 +267,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     animId=requestAnimationFrame(loop);
     try{
       if(!paused){
-        ensureMats();
-        if(!grabToSrc()) return;
+        ensureMats(); if(!grabToSrc()) return;
         cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
         detectOnCurrentFrame(true);
@@ -308,7 +275,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
   }
 
-  /* ------ sources & UI ------ */
+  /* Sources & UI */
   $('#fileInput').onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
     video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
@@ -318,8 +285,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   $('#btnCam').onclick=async()=>{
     try{
       if(stream){ stream.getTracks().forEach(t=>t.stop()); }
-      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
-      stream=s; video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started');
+      stream=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
+      video.loop=false; video.onended=null; video.srcObject=stream; await video.play(); setStatus('Camera started');
     }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
   };
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
@@ -332,68 +299,55 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   $('#btnReset').onclick=()=>{
     const d={scale:60,minArea:1200,thresh:200,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20};
     for(const [k,v] of Object.entries(d)){ c[k].value=v; (k==='alpha'?b.alphaVal:b[(k==='trailLen')?'trailVal':k+'Val']).textContent=(k==='alpha')?(v/100).toFixed(2):v; }
-    hexBox.value='#00C2FF'; colBox.value='#00C2FF';
-    hexLine.value='#9CA3AF'; colLine.value='#9CA3AF';
-    hexText.value='#EEEEEE'; colText.value='#EEEEEE';
-    c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
-    start();
+    hexBox.value='#00C2FF'; colBox.value='#00C2FF'; hexLine.value='#9CA3AF'; colLine.value='#9CA3AF'; hexText.value='#EEEEEE'; colText.value='#EEEEEE';
+    c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true; start();
   };
   video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
   video.onplay = ()=> setStatus('Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* ------------------- SAVE: WebCodecs (Chromium) or MediaRecorder (Safari) ------------------- */
-  $('#btnSave').onclick = () => saveMP4().catch(err=>{ console.error(err); setStatus('Save failed: '+err.message); });
+  /* SAVE (deterministic: never hangs) */
+  $('#btnSave').onclick = () => saveMP4().catch(e=>{ console.error(e); setStatus('Save failed: '+e.message); });
+
+  function supportsWebCodecs(){ return 'VideoEncoder' in window && 'VideoFrame' in window; }
+  function supportsMediaRecorder(){ return 'MediaRecorder' in window && typeof canvas.captureStream==='function'; }
 
   async function saveMP4(){
-    if(!video.src || stream){ setStatus('Load a video file first — live camera export is not supported'); return; }
-
-    if (supportsWebCodecs()) {
-      await saveViaWebCodecs();
-    } else if (supportsMediaRecorder()) {
-      await saveViaMediaRecorder();
-    } else {
-      setStatus('No export path supported by this browser.');
-    }
+    if(!video.src || stream){ setStatus('Load a video file first — live camera export not supported'); return; }
+    if (supportsWebCodecs()) await saveViaWebCodecs();
+    else if (supportsMediaRecorder()) await saveViaMediaRecorder();
+    else setStatus('Export not supported in this browser.');
   }
 
-  /* ---------- WebCodecs + mp4-muxer (Windows/macOS Chrome/Edge) ---------- */
-  function clampToH264Area(W,H){
-    const MAX_AREA = 414720; // H.264 Level 3.0
-    if (W*H <= MAX_AREA) return {W,H};
-    const s = Math.sqrt(MAX_AREA/(W*H));
-    return { W:(Math.floor(W*s)&~1), H:(Math.floor(H*s)&~1) };
+  function clampH264Area(W,H){
+    const MAX=414720; if(W*H<=MAX) return {W,H};
+    const s=Math.sqrt(MAX/(W*H)); return {W:(Math.floor(W*s)&~1), H:(Math.floor(H*s)&~1)};
   }
-  function chooseProfiles(width,height,fps,bitrate){
+  function profileList(width,height,fps,bitrate){
     return [
-      {codec:'avc1.640028',width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate}, // High
-      {codec:'avc1.4D4020',width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate}, // Main
-      {codec:'avc1.42E01E',width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate}, // Baseline
+      {codec:'avc1.640028',width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate},
+      {codec:'avc1.4D4020',width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate},
+      {codec:'avc1.42E01E',width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate},
     ];
   }
-  function supportsWebCodecs(){ return 'VideoEncoder' in window && 'VideoFrame' in window; }
 
   async function saveViaWebCodecs(){
-    setStatus('Saving MP4…');
-
-    await ensureLoadedMeta(video);
-    video.loop = false;
-    await seekAsync(video, 0);
-    try{ await video.play(); }catch{}
-
     const fps = await estimateFPS(video) || 30;
+    await ensureMeta(video);
+    const duration = Math.max(0, video.duration || 0);
+    const frames = Math.max(1, Math.round(duration*fps));
+
     const W0=(canvas.width&~1), H0=(canvas.height&~1);
-    const {W,H} = clampToH264Area(W0,H0);
+    const {W,H} = clampH264Area(W0,H0);
     const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H;
     const ectx=encCanvas.getContext('2d');
-    const bitrate=Math.round(W*H*fps*0.12);
 
-    let ok=null;
-    for(const cfg of chooseProfiles(W,H,fps,bitrate)){
+    let ok=null; const bitrate=Math.round(W*H*fps*0.12);
+    for(const cfg of profileList(W,H,fps,bitrate)){
       const sup=await VideoEncoder.isConfigSupported(cfg).catch(()=>null);
       if(sup?.supported){ ok=sup.config; break; }
     }
-    if(!ok){ setStatus('Encoder config not supported for this size; try smaller “Processing Scale”.'); return; }
+    if(!ok){ setStatus('Encoder not supported for this size. Lower “Processing Scale”.'); return; }
 
     const target=new ArrayBufferTarget();
     const muxer=new Muxer({
@@ -403,23 +357,36 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       video:{ codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
     });
 
-    let outIdx=0; // make timestamps 0..N
+    let encoded=0;
     const encoder=new VideoEncoder({
       output:(chunk,meta)=>{
-        const ts=Math.round(outIdx++*1e6/fps);
-        muxer.addVideoChunk(chunk, meta, ts, Math.round(1e6/fps), 0);
+        const ts=Math.round(encoded*1e6/fps);
+        muxer.addVideoChunk(chunk,meta,ts,Math.round(1e6/fps),0);
+        encoded++;
+        if (encoded%10===0 || encoded===frames) setStatus(`Saving MP4… ${Math.round(100*encoded/frames)}%`);
       },
       error:e=>console.error(e)
     });
     encoder.configure(ok);
 
-    await driveFramesDeterministic(fps, ()=>{
+    // **Deterministic frame extraction by seeking** – no rVFC, no hang.
+    for(let i=0;i<frames;i++){
+      const t = Math.min(duration, i/fps);
+      await seekAsync(video, t);            // wait for the frame to decode
+      ensureMats(); if(!grabToSrc()) break;
+      cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+      detectOnCurrentFrame(true);
+
       ectx.drawImage(canvas,0,0,W,H);
       const vf=new VideoFrame(encCanvas,{timestamp:0});
       encoder.encode(vf); vf.close();
-    });
+      // yield to keep UI responsive
+      if (i%5===0) await new Promise(r=>setTimeout(r,0));
+    }
 
     await encoder.flush(); encoder.close();
+    if (encoded===0){ setStatus('No frames encoded. This file may be protected or not seekable.'); return; }
     muxer.finalize();
 
     const blob=new Blob([target.buffer],{type:'video/mp4'});
@@ -427,127 +394,58 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     setStatus('Exported .mp4');
   }
 
-  async function driveFramesDeterministic(fps, encodeOne){
-    await ensureLoadedMeta(video);
-    const duration = Math.max(0, isFinite(video.duration)?video.duration:0);
-    const expected = Math.max(1, Math.round(duration*fps));
-    let i=0;
-    const EPS=0.003;
-
-    if ('requestVideoFrameCallback' in HTMLVideoElement.prototype){
-      await new Promise(resolve=>{
-        let watchdog=null;
-        const poke=()=>{ clearTimeout(watchdog); watchdog=setTimeout(()=>resolve(),2000); };
-        const step=()=>{
-          poke();
-          if(i>=expected || video.currentTime >= duration-EPS){ clearTimeout(watchdog); resolve(); return; }
-          ensureMats(); if(!grabToSrc()){ clearTimeout(watchdog); resolve(); return; }
-          cv.cvtColor(src,gray,COLOR_RGBA2GRAY); cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
-          detectOnCurrentFrame(true);
-          encodeOne(); i++;
-          video.requestVideoFrameCallback(step);
-        };
-        poke(); video.requestVideoFrameCallback(step);
-      });
-    }else{
-      await new Promise(resolve=>{
-        const timer=setInterval(()=>{
-          if(i>=expected || video.currentTime >= duration-EPS){ clearInterval(timer); resolve(); return; }
-          ensureMats(); if(!grabToSrc()){ clearInterval(timer); resolve(); return; }
-          cv.cvtColor(src,gray,COLOR_RGBA2GRAY); cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
-          detectOnCurrentFrame(true);
-          encodeOne(); i++;
-        }, Math.max(8, Math.round(1000/fps)));
-      });
-    }
-  }
-
-  function ensureLoadedMeta(v){
-    if (isFinite(v.duration) && v.duration>0) return Promise.resolve();
-    return new Promise(r=> v.addEventListener('loadedmetadata', r, {once:true}));
-  }
-  function seekAsync(v,t){ return new Promise(r=>{ const h=()=>{v.removeEventListener('seeked',h); r();}; v.addEventListener('seeked',h); v.currentTime=t; }); }
-
-  async function estimateFPS(v){
-    return new Promise(res=>{
-      if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(null);
-      let f=0, t0=null;
-      const cb=(_,meta)=>{ f++; if(t0==null) t0=meta.mediaTime; if(meta.mediaTime-t0>=1){ res(f); } else v.requestVideoFrameCallback(cb); };
-      v.requestVideoFrameCallback(cb);
-    });
-  }
-
-  /* ---------- MediaRecorder fallback (iOS/macOS Safari) ---------- */
-  function supportsMediaRecorder(){
-    return 'MediaRecorder' in window && typeof canvas.captureStream === 'function';
-  }
   async function saveViaMediaRecorder(){
-    setStatus('Recording MP4…');
-
-    await ensureLoadedMeta(video);
-    const fps = 30; // captureStream FPS hint (Safari ignores exact value; good enough)
-    const stream = canvas.captureStream(fps);
-
-    // pick mp4 first, then webm (Safari should accept mp4)
-    let mime = 'video/mp4;codecs=avc1.42E01E';
-    if (!MediaRecorder.isTypeSupported(mime)) {
-      mime = 'video/mp4';
-      if (!MediaRecorder.isTypeSupported(mime)) {
-        mime = 'video/webm;codecs=vp8';
-      }
-    }
-
-    const chunks=[];
-    const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4_000_000 });
-    rec.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
-    const stopped = new Promise(res => rec.onstop = res);
+    // Safari/iOS fallback: record canvas playback
+    await ensureMeta(video);
+    const stream = canvas.captureStream(30);
+    let mime='video/mp4;codecs=avc1.42E01E';
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/mp4';
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp8';
+    const chunks=[]; const rec=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:4_000_000});
+    rec.ondataavailable=e=>{ if(e.data?.size) chunks.push(e.data); };
+    const done=new Promise(r=>rec.onstop=r);
     rec.start();
 
-    // play from start and let our normal rAF loop draw overlays
-    await seekAsync(video, 0);
+    // play and let the normal loop draw
     paused=false; if(animId===null) loop();
-    try { await video.play(); } catch {}
+    await seekAsync(video,0); try{ await video.play(); }catch{}
+    await new Promise(r=>video.addEventListener('ended',r,{once:true}));
+    rec.stop(); await done;
 
-    // stop when video ends (or after safety timeout)
-    const endP = new Promise(res => video.addEventListener('ended', res, {once:true}));
-    const safety = new Promise(res => setTimeout(res, (isFinite(video.duration)?video.duration:5)*1000 + 1500));
-    await Promise.race([endP, safety]);
-
-    rec.stop(); await stopped;
-
-    const blob = new Blob(chunks, { type: mime.includes('mp4') ? 'video/mp4' : 'video/webm' });
-    await saveBlobInteractive(blob, `blob-tracking-recorded.mp4`);
+    const blob=new Blob(chunks,{type:mime.includes('mp4')?'video/mp4':'video/webm'});
+    await saveBlobInteractive(blob,'blob-tracking-recorded.mp4');
     setStatus('Exported .mp4');
   }
 
-  /* ---------- Saving to disk: Windows/macOS & iOS ---------- */
   async function saveBlobInteractive(blob, suggestedName){
-    // iOS/macOS Safari: use share sheet when possible (lets user “Save to Files”)
-    if (navigator.canShare && 'share' in navigator) {
+    if (navigator.canShare) {
       try{
-        const file = new File([blob], suggestedName, { type: blob.type });
-        if (navigator.canShare({ files:[file] })) {
-          await navigator.share({ files:[file], title:'Exported video' });
-          return;
-        }
+        const file=new File([blob], suggestedName, {type:blob.type});
+        if (navigator.canShare({files:[file]})) { await navigator.share({files:[file],title:'Exported video'}); return; }
       }catch{}
     }
-    // Chrome/Edge: native save dialog
-    if ('showSaveFilePicker' in window) {
-      const handle = await showSaveFilePicker({
+    if ('showSaveFilePicker' in window){
+      const handle=await showSaveFilePicker({
         suggestedName,
         types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
       });
-      const w = await handle.createWritable(); await w.write(blob); await w.close();
-      return;
+      const w=await handle.createWritable(); await w.write(blob); await w.close(); return;
     }
-    // Generic fallback: open a download link (Safari will show the video; Share → Save to Files)
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = suggestedName;
-    a.target = '_blank'; // better UX on iOS
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=suggestedName; a.target='_blank';
     document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 1500);
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }
+
+  /* Helpers */
+  function ensureMeta(v){ if(isFinite(v.duration)&&v.duration>0) return Promise.resolve(); return new Promise(r=>v.addEventListener('loadedmetadata',r,{once:true})); }
+  function seekAsync(v,t){ return new Promise(r=>{ const h=()=>{v.removeEventListener('seeked',h); r();}; v.addEventListener('seeked',h); v.currentTime=t; }); }
+  async function estimateFPS(v){
+    if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return 30;
+    return new Promise(res=>{
+      let f=0,t0=null; const cb=(_,m)=>{ f++; if(t0==null) t0=m.mediaTime; if(m.mediaTime-t0>=1){ res(Math.max(24,Math.min(60,f))); }else v.requestVideoFrameCallback(cb); };
+      v.requestVideoFrameCallback(cb);
+    });
   }
 
 })();
