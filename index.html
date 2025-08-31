@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blob Tracking Eiei</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* --- warm purple dark theme --- */
+  :root{
+    --bg:#121016;
+    --panel:#171320;
+    --canvas:#15121c;
+    --fg:#efe9ff;
+    --muted:#cfc6e6;
+    --line:#2b2240;
+    --accent:#c084fc;   /* warm purple */
+    --chip:#1a1526;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{margin:0;font-size:18px}
+  #stageWrap{padding:12px 16px 84px}
+  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
+  video,#buf{display:none}
+
+  .controls{padding:10px 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:center}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  label{font-size:13px;color:var(--muted)}
+  input[type="range"]{width:180px;accent-color:var(--accent)}
+  input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip)}
+  input[type="text"].hex{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
+  .status{margin:8px 0 0;padding:8px 12px;border-radius:10px;font-size:13px;border:1px solid var(--line);background:var(--chip)}
+
+  /* sticky bottom bar */
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,.0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
+  .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .push{flex:1} /* pushes Save to the right */
+  button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
+  button.primary{border-color:transparent;background:var(--accent);color:#1b1026}
+  button.ghost{background:transparent}
+</style>
+</head>
+<body>
+<header><h1>Blob Tracking</h1></header>
+
+<div id="stageWrap">
+  <canvas id="canvas"></canvas>
+  <video id="video" playsinline muted></video>
+  <canvas id="buf"></canvas>
+
+  <div class="controls">
+    <div class="grid">
+      <div class="row"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
+      <div class="row"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
+      <div class="row"><label>Threshold (0–255) <span id="threshVal" class="badge">200</span></label><input type="range" id="thresh" min="30" max="255" value="200"></div>
+      <div class="row"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
+      <div class="row"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
+      <div class="row"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
+      <div class="row"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
+      <div class="row"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
+      <div class="row"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
+
+      <div class="row" style="grid-column:1/-1;gap:18px">
+        <span class="row"><label>Box</label><input type="color" id="colBox"><input class="hex" id="hexBox" value="#00C2FF"></span>
+        <span class="row"><label>Line</label><input type="color" id="colLine"><input class="hex" id="hexLine" value="#9CA3AF"></span>
+        <span class="row"><label>Text</label><input type="color" id="colText"><input class="hex" id="hexText" value="#EEEEEE"></span>
+      </div>
+
+      <div class="row" style="grid-column:1/-1;gap:18px">
+        <label>Show Coords <input type="checkbox" id="showCoord" checked></label>
+        <label>Show Trails <input type="checkbox" id="showTrail" checked></label>
+        <label>Show Links <input type="checkbox" id="showLinks" checked></label>
+        <span id="status" class="status">Loading OpenCV.js…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sticky bottom bar -->
+<div class="bar">
+  <div class="wrap">
+    <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
+    <button id="btnCam" class="primary">Camera</button>
+    <button id="btnRestart">Restart Video</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset" class="ghost">Reset to Default</button>
+    <span class="push"></span>
+    <button id="btnSave" class="primary">Save (.mp4)</button>
+  </div>
+</div>
+
+<script>
+function setStatus(text){ const el=document.getElementById('status'); if(el) el.textContent=text; else console.log('[status]',text); }
+window.__cvReady=false; window.__videoReady=false;
+window.Module = {
+  onRuntimeInitialized(){ window.__cvReady=true; setStatus('OpenCV.js ready'); if(window.__videoReady && typeof window.__start==='function') window.__start(); }
+};
+</script>
+<script src="https://docs.opencv.org/4.x/opencv.js"></script>
+
+<script type="module">
+(() => {
+  const $=s=>document.querySelector(s);
+  const canvas=$('#canvas'), ctx=canvas.getContext('2d');
+  const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
+  const video=$('#video'); video.muted=true; video.playsInline=true;
+
+  const c={scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),alpha:$('#alpha'),
+           maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),linkDist:$('#linkDist'),trailLen:$('#trailLen'),
+           showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks')};
+  const b={scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),morphVal:$('#morphVal'),
+           alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),maxDistVal:$('#maxDistVal'),
+           linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal')};
+
+  Object.entries(c).forEach(([k,el])=>{
+    if(el?.type==='range'){
+      const id=(k==='trailLen')?'trailVal':(k+'Val'); const badge=b[id];
+      const upd=()=>badge.textContent=(k==='alpha')?(+el.value/100).toFixed(2):el.value;
+      el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd();
+    }else if(el?.type==='checkbox'){
+      el.addEventListener('change', ()=>{ if(paused) reprocessPaused(); });
+    }
+  });
+
+  function bindColor(colorEl,hexEl,defHex){
+    const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
+    colorEl.value=defHex; hexEl.value=defHex;
+    colorEl.addEventListener('input', ()=>{ hexEl.value=colorEl.value.toUpperCase(); if(paused) reprocessPaused(); });
+    hexEl.addEventListener('change', ()=>{ hexEl.value=norm(hexEl.value); colorEl.value=hexEl.value; if(paused) reprocessPaused(); });
+  }
+  const colBox=$('#colBox'), hexBox=$('#hexBox');
+  const colLine=$('#colLine'), hexLine=$('#hexLine');
+  const colText=$('#colText'), hexText=$('#hexText');
+  bindColor(colBox,hexBox,'#00C2FF'); bindColor(colLine,hexLine,'#9CA3AF'); bindColor(colText,hexText,'#EEEEEE');
+
+  class CentroidTracker{
+    constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
+    register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
+    deregister(id){this.objects.delete(id);this.disappeared.delete(id);}
+    update(cs){
+      if(cs.length===0){for(const id of this.disappeared.keys()){this.disappeared.set(id,this.disappeared.get(id)+1);if(this.disappeared.get(id)>this.maxDisappeared)this.deregister(id);}return this.objects;}
+      if(this.objects.size===0){cs.forEach(c=>this.register(c));return this.objects;}
+      const ids=[...this.objects.keys()], base=[...this.objects.values()];
+      const D=base.map(b=>cs.map(c=>Math.hypot(b[0]-c[0],b[1]-c[1]))), usedR=new Set(), usedC=new Set();
+      const rows=[...D.keys()].sort((a,b)=>Math.min(...D[a])-Math.min(...D[b])), argmin=r=>D[r].indexOf(Math.min(...D[r]));
+      for(const r of rows){const ci=argmin(r); if(usedR.has(r)||usedC.has(ci)) continue; if(D[r][ci]>this.maxDistance) continue;
+        const id=ids[r]; this.objects.set(id,cs[ci]); this.disappeared.set(id,0); usedR.add(r); usedC.add(ci);}
+      for(let ci=0;ci<cs.length;ci++) if(!usedC.has(ci)) this.register(cs[ci]);
+      for(let r=0;r<base.length;r++) if(!usedR.has(r)){const id=ids[r]; this.disappeared.set(id,this.disappeared.get(id)+1); if(this.disappeared.get(id)>this.maxDisappeared)this.deregister(id);}
+      return this.objects;
+    }
+  }
+  let tracker=new CentroidTracker(+c.maxDisappear.value,+c.maxDist.value);
+  c.maxDisappear.oninput=()=>tracker.maxDisappeared=+c.maxDisappear.value;
+  c.maxDist.oninput=()=>tracker.maxDistance=+c.maxDist.value;
+
+  const trails=new Map();
+
+  // OpenCV mats & loop
+  let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
+  let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
+
+  function cleanup(){
+    cancelAnimationFrame(animId); animId=null;
+    [src,gray,blur,bg,diff,thr,kernel,contours,hierarchy].forEach(m=>{ try{ m && m.delete(); }catch{} });
+    src=gray=blur=bg=diff=thr=kernel=contours=hierarchy=null;
+    trails.clear();
+  }
+
+  function grabToSrc(){
+    bctx.drawImage(video,0,0,procW,procH);
+    const im=bctx.getImageData(0,0,procW,procH);
+    src.data.set(im.data);
+  }
+
+  function drawOverlayFromDetections(boxes, objs, maxTrail){
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+    ctx.lineWidth=2; ctx.strokeStyle=hexBox.value;
+    boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
+
+    if(c.showLinks.checked){
+      const pts=[...objs.values()].map(([x,y])=>({x,y}));
+      const L=+c.linkDist.value; ctx.lineWidth=1.5; ctx.strokeStyle=hexLine.value;
+      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+        const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
+        if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
+      }
+    }
+    if(c.showTrail.checked && maxTrail>0){
+      ctx.lineWidth=1; ctx.strokeStyle=hexLine.value+'90';
+      for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
+    }
+    ctx.font='14px ui-sans-serif,system-ui';
+    for(const [id,[cx,cy]] of objs.entries()){
+      ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+      const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
+      ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
+    }
+  }
+
+  function detectOnCurrentFrame(updateTracker=true){
+    const alpha=Math.min(1,Math.max(0,+c.alpha.value/100));
+    if(!paused){ cv.addWeighted(bg,(1-alpha),blur,alpha,0,bg); }
+
+    cv.absdiff(blur,bg,diff);
+    cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
+
+    const it=+c.morph.value;
+    if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
+
+    contours.delete(); hierarchy.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
+    cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+
+    const minArea=+c.minArea.value*scale*scale;
+    const boxes=[], centers=[];
+    for(let i=0;i<contours.size();i++){
+      const cnt=contours.get(i), area=cv.contourArea(cnt); if(area<minArea) continue;
+      const r=cv.boundingRect(cnt); const x=r.x/scale, y=r.y/scale, w=r.width/scale, h=r.height/scale;
+      boxes.push({x,y,w,h}); centers.push([x+w/2,y+h/2]);
+    }
+
+    let objs=new Map();
+    if(updateTracker){
+      tracker.maxDistance=+c.maxDist.value; tracker.maxDisappeared=+c.maxDisappear.value;
+      objs=tracker.update(centers);
+      const active=new Set(objs.keys()); for(const id of [...trails.keys()]) if(!active.has(id)) trails.delete(id);
+      const maxTrail=+c.trailLen.value;
+      for(const [id,[cx,cy]] of objs.entries()){
+        if(!trails.has(id)) trails.set(id,[]);
+        const arr=trails.get(id); arr.push({x:cx,y:cy}); while(arr.length>maxTrail) arr.shift();
+      }
+      drawOverlayFromDetections(boxes, objs, +c.trailLen.value);
+    }else{
+      centers.forEach((p,i)=>objs.set(i,p));
+      drawOverlayFromDetections(boxes, objs, 0);
+    }
+  }
+
+  function reprocessPaused(){ if(!paused) return; detectOnCurrentFrame(false); }
+
+  function start(){
+    try{
+      cleanup();
+      const vw=video.videoWidth||640, vh=video.videoHeight||360;
+      canvas.width=vw; canvas.height=vh;
+      scale=Math.max(0.3, Math.min(1, +c.scale.value/100));
+      procW=Math.max(64, Math.round(vw*scale)); procH=Math.max(36, Math.round(vh*scale));
+      buf.width=procW; buf.height=procH;
+
+      src=new cv.Mat(procH,procW,cv.CV_8UC4);
+      gray=new cv.Mat(procH,procW,cv.CV_8UC1);
+      blur=new cv.Mat(procH,procW,cv.CV_8UC1);
+      bg=new cv.Mat(procH,procW,cv.CV_8UC1);
+      diff=new cv.Mat(procH,procW,cv.CV_8UC1);
+      thr=new cv.Mat(procH,procW,cv.CV_8UC1);
+      kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));
+      contours=new cv.MatVector(); hierarchy=new cv.Mat();
+
+      grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY); cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
+      setStatus(`Running • ${vw}×${vh} (proc ${procW}×${procH})`);
+      paused=false; loop();
+    }catch(err){ console.error(err); setStatus('Start failed: '+err.message); }
+  }
+  window.__start=start;
+
+  function loop(){
+    animId=requestAnimationFrame(loop);
+    try{
+      if(!paused){
+        grabToSrc();
+        cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+        detectOnCurrentFrame(true);
+      }
+    }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
+  }
+
+  // Sources & UI
+  $('#fileInput').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
+    const canQT=!!video.canPlayType && video.canPlayType('video/quicktime');
+    const canMP4=!!video.canPlayType && (video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') || video.canPlayType('video/mp4'));
+    if((f.type||'').includes('quicktime') && !canQT && !canMP4){ setStatus('This browser cannot play .mov — convert to .mp4 (H.264).'); return; }
+    try{ URL.revokeObjectURL(video.src); }catch{}
+    video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
+  };
+  $('#btnCam').onclick=async()=>{
+    try{
+      if(stream){ stream.getTracks().forEach(t=>t.stop()); }
+      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
+      stream=s; video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started');
+    }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
+  };
+  $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
+  $('#btnPause').onclick=()=>{
+    if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; }
+    paused=!paused;
+    if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); $('#btnPause').textContent='Resume'; reprocessPaused(); }
+    else{ video.play(); setStatus('Playing…'); $('#btnPause').textContent='Pause'; if(animId===null) loop(); }
+  };
+  $('#btnReset').onclick=()=>{
+    const d={scale:60,minArea:1200,thresh:200,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20};
+    c.scale.value=d.scale; b.scaleVal.textContent=d.scale;
+    c.minArea.value=d.minArea; b.minAreaVal.textContent=d.minArea;
+    c.thresh.value=d.thresh; b.threshVal.textContent=d.thresh;
+    c.morph.value=d.morph; b.morphVal.textContent=d.morph;
+    c.alpha.value=d.alpha; b.alphaVal.textContent=(d.alpha/100).toFixed(2);
+    c.maxDisappear.value=d.maxDisappear; b.maxDisappearVal.textContent=d.maxDisappear;
+    c.maxDist.value=d.maxDist; b.maxDistVal.textContent=d.maxDist;
+    c.linkDist.value=d.linkDist; b.linkDistVal.textContent=d.linkDist;
+    c.trailLen.value=d.trailLen; b.trailVal.textContent=d.trailLen;
+    hexBox.value='#00C2FF'; colBox.value='#00C2FF';
+    hexLine.value='#9CA3AF'; colLine.value='#9CA3AF';
+    hexText.value='#EEEEEE'; colText.value='#EEEEEE';
+    c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
+    start();
+  };
+  video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
+  video.onplay = ()=> setStatus('Playing…');
+  video.onerror = ()=> setStatus('Video cannot play (codec?)');
+
+  /* ---------- SAVE to MP4 (WebCodecs, 1 pass, same res/fps) ---------- */
+  $('#btnSave').onclick = saveMP4;
+
+  async function loadMuxer(){
+    const urls=[
+      'https://cdn.jsdelivr.net/npm/mp4-muxer@5.3.0/dist/mp4-muxer.esm.js',
+      'https://cdn.jsdelivr.net/npm/mp4-muxer@5.3.0/dist/mp4-muxer.mjs',
+      'https://unpkg.com/mp4-muxer@5.3.0/dist/mp4-muxer.esm.js',
+      'https://esm.sh/mp4-muxer@5.3.0?bundle'
+    ];
+    let lastErr=null;
+    for(const u of urls){
+      try{ return await import(u); }catch(e){ lastErr=e; }
+    }
+    throw lastErr||new Error('Unable to load MP4 muxer');
+  }
+
+  async function saveMP4(){
+    if(!video.src || stream){ setStatus('Load a file video (.mp4/.mov) first — export from live camera is not supported'); return; }
+    const canWebCodecs=('VideoEncoder' in window)&&('VideoFrame' in window);
+    if(!canWebCodecs){ setStatus('This browser has no WebCodecs — MP4 export not available. Use Chrome/Edge/Safari with WebCodecs.'); return; }
+
+    const restoreLoop=video.loop, restoreTime=video.currentTime;
+    const wasPaused=paused; paused=false;
+    video.loop=false; video.currentTime=0;
+    await video.play();
+
+    const fps = await estimateFPS(video) || 30;
+    const width=video.videoWidth, height=video.videoHeight;
+
+    try{
+      const {Muxer, ArrayBufferTarget} = await loadMuxer();
+      const target=new ArrayBufferTarget();
+      const muxer=new Muxer({target, fastStart:true, video:{width,height,codec:'avc1.42E01E',timescale:fps}});
+
+      const bitrate = Math.round(width*height*fps*0.12); // high quality
+      const cfg={codec:'avc1.42E01E', width,height, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate};
+      const sup=await VideoEncoder.isConfigSupported(cfg);
+      const encoder=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta), error:e=>console.error(e)});
+      encoder.configure(sup.config);
+
+      await runExportFrames(frame=>{
+        const vf=new VideoFrame(canvas,{timestamp:Math.round(frame*1e6/fps)});
+        encoder.encode(vf); vf.close();
+      });
+
+      await encoder.flush(); muxer.finalize();
+      const blob=new Blob([target.buffer],{type:'video/mp4'});
+      downloadBlob(blob,`blob-tracking-eiei-${width}x${height}@${fps}.mp4`);
+    }catch(err){
+      console.error(err);
+      setStatus('Failed to export MP4 (muxer/WebCodecs). Please try a different browser or allow cross-origin modules.');
+    }finally{
+      video.loop=restoreLoop;
+      if(wasPaused){ paused=true; video.pause(); } else { video.play(); }
+      video.currentTime=restoreTime;
+    }
+  }
+
+  function runExportFrames(onEncode){
+    return new Promise(resolve=>{
+      setStatus('Saving MP4…');
+      const step=(_,meta)=>{
+        if(video.ended){ resolve(); return; }
+        grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY); cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+        detectOnCurrentFrame(true);
+        onEncode(meta.presentedFrames||0);
+        video.requestVideoFrameCallback(step);
+      };
+      video.requestVideoFrameCallback(step);
+    });
+  }
+  async function estimateFPS(v){
+    return new Promise(res=>{
+      if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(null);
+      let f=0, t0=null;
+      const cb=(_,meta)=>{ f++; if(t0==null) t0=meta.mediaTime; if(meta.mediaTime-t0>=1){ res(f); } else v.requestVideoFrameCallback(cb); };
+      v.requestVideoFrameCallback(cb);
+    });
+  }
+  function downloadBlob(blob,name){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000); }
+})();
+</script>
+</body>
+</html>
