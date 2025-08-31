@@ -410,6 +410,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       const muxer = new Muxer({
         target,
         fastStart: 'in-memory',
+        firstTimestampBehavior: 'offset',
         video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
       });
 
@@ -442,22 +443,27 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
 
-  function driveFrames(onEncode){
-    return new Promise(resolve=>{
-      setStatus('Saving MP4…');
-      const step=(_,meta)=>{
-        if(video.ended){ resolve(); return; }
-        ensureMats();
-        if(!grabToSrc()){ resolve(); return; }
-        cv.cvtColor(src,gray,COLOR_RGBA2GRAY);         // <-- safe constant
-        cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
-        detectOnCurrentFrame(true);
-        onEncode(meta.presentedFrames||0);
-        video.requestVideoFrameCallback(step);
-      };
+function driveFrames(onEncode){
+  return new Promise(resolve=>{
+    setStatus('Saving MP4…');
+    let i = 0;                              // start at 0 and increment ourselves
+    const step = () => {
+      if (video.ended) { resolve(); return; }
+
+      ensureMats();
+      if (!grabToSrc()) { resolve(); return; }
+
+      cv.cvtColor(src, gray, COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0);
+      detectOnCurrentFrame(true);
+
+      onEncode(i++);                        // strictly 0,1,2,3…
       video.requestVideoFrameCallback(step);
-    });
-  }
+    };
+    video.requestVideoFrameCallback(step);
+  });
+}
+
 
   async function estimateFPS(v){
     return new Promise(res=>{
