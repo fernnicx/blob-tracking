@@ -5,16 +5,10 @@
 <title>Blob Tracking Eiei</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  /* --- warm purple dark theme --- */
   :root{
-    --bg:#121016;
-    --panel:#171320;
-    --canvas:#15121c;
-    --fg:#efe9ff;
-    --muted:#cfc6e6;
-    --line:#2b2240;
-    --accent:#c084fc;   /* warm purple */
-    --chip:#1a1526;
+    --bg:#121016; --panel:#171320; --canvas:#15121c;
+    --fg:#efe9ff; --muted:#cfc6e6; --line:#2b2240;
+    --accent:#c084fc; --chip:#1a1526;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -24,7 +18,6 @@
   #stageWrap{padding:12px 16px 84px}
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
-
   .controls{padding:10px 16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:center}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -34,11 +27,9 @@
   input[type="text"].hex{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
   .status{margin:8px 0 0;padding:8px 12px;border-radius:10px;font-size:13px;border:1px solid var(--line);background:var(--chip)}
-
-  /* sticky bottom bar */
   .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,.0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  .push{flex:1} /* pushes Save to the right */
+  .push{flex:1}
   button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
   button.primary{border-color:transparent;background:var(--accent);color:#1b1026}
   button.ghost{background:transparent}
@@ -103,6 +94,9 @@ window.Module = {
 <script src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <script type="module">
+/* ---------- static local import (no CORS) ---------- */
+import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
+
 (() => {
   const $=s=>document.querySelector(s);
   const canvas=$('#canvas'), ctx=canvas.getContext('2d');
@@ -160,7 +154,6 @@ window.Module = {
 
   const trails=new Map();
 
-  // OpenCV mats & loop
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
 
@@ -216,7 +209,7 @@ window.Module = {
     const it=+c.morph.value;
     if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
 
-    contours.delete(); hierarchy.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
+    contours?.delete(); hierarchy?.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
     cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
 
     const minArea=+c.minArea.value*scale*scale;
@@ -331,24 +324,10 @@ window.Module = {
   /* ---------- SAVE to MP4 (WebCodecs, 1 pass, same res/fps) ---------- */
   $('#btnSave').onclick = saveMP4;
 
-  async function loadMuxer(){
-    const urls=[
-      'https://cdn.jsdelivr.net/npm/mp4-muxer@5.3.0/dist/mp4-muxer.esm.js',
-      'https://cdn.jsdelivr.net/npm/mp4-muxer@5.3.0/dist/mp4-muxer.mjs',
-      'https://unpkg.com/mp4-muxer@5.3.0/dist/mp4-muxer.esm.js',
-      'https://esm.sh/mp4-muxer@5.3.0?bundle'
-    ];
-    let lastErr=null;
-    for(const u of urls){
-      try{ return await import(u); }catch(e){ lastErr=e; }
-    }
-    throw lastErr||new Error('Unable to load MP4 muxer');
-  }
-
   async function saveMP4(){
     if(!video.src || stream){ setStatus('Load a file video (.mp4/.mov) first — export from live camera is not supported'); return; }
     const canWebCodecs=('VideoEncoder' in window)&&('VideoFrame' in window);
-    if(!canWebCodecs){ setStatus('This browser has no WebCodecs — MP4 export not available. Use Chrome/Edge/Safari with WebCodecs.'); return; }
+    if(!canWebCodecs){ setStatus('This browser has no WebCodecs — MP4 export not available.'); return; }
 
     const restoreLoop=video.loop, restoreTime=video.currentTime;
     const wasPaused=paused; paused=false;
@@ -356,30 +335,45 @@ window.Module = {
     await video.play();
 
     const fps = await estimateFPS(video) || 30;
-    const width=video.videoWidth, height=video.videoHeight;
+    // H.264 requires even width/height — encode from an even-sized canvas
+    const encCanvas=document.createElement('canvas'), ectx=encCanvas.getContext('2d');
+    const W=(canvas.width & ~1), H=(canvas.height & ~1);
+    encCanvas.width=W; encCanvas.height=H;
 
     try{
-      const {Muxer, ArrayBufferTarget} = await loadMuxer();
-      const target=new ArrayBufferTarget();
-      const muxer=new Muxer({target, fastStart:true, video:{width,height,codec:'avc1.42E01E',timescale:fps}});
-
-      const bitrate = Math.round(width*height*fps*0.12); // high quality
-      const cfg={codec:'avc1.42E01E', width,height, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate};
+      const bitrate = Math.round(W*H*fps*0.12);
+      const cfg={codec:'avc1.42E01E', width:W, height:H, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate};
       const sup=await VideoEncoder.isConfigSupported(cfg);
+      const muxTarget=new ArrayBufferTarget();
+      const muxer=new Muxer({target:muxTarget, fastStart:true, video:{width:W,height:H,codec:'avc1.42E01E',timescale:fps}});
       const encoder=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta), error:e=>console.error(e)});
       encoder.configure(sup.config);
 
-      await runExportFrames(frame=>{
-        const vf=new VideoFrame(canvas,{timestamp:Math.round(frame*1e6/fps)});
+      await runExportFrames((frameIdx)=>{
+        // draw main canvas into the encoder canvas (handles odd dims safely)
+        ectx.drawImage(canvas,0,0,W,H);
+        const vf=new VideoFrame(encCanvas,{timestamp:Math.round(frameIdx*1e6/fps)});
         encoder.encode(vf); vf.close();
       });
 
       await encoder.flush(); muxer.finalize();
-      const blob=new Blob([target.buffer],{type:'video/mp4'});
-      downloadBlob(blob,`blob-tracking-eiei-${width}x${height}@${fps}.mp4`);
+      const blob=new Blob([muxTarget.buffer],{type:'video/mp4'});
+      await saveBlobInteractive(blob, `blob-tracking-eiei-${W}x${H}@${fps}.mp4`);
+      setStatus('Exported .mp4');
     }catch(err){
       console.error(err);
-      setStatus('Failed to export MP4 (muxer/WebCodecs). Please try a different browser or allow cross-origin modules.');
+      // Safari fallback: MediaRecorder('video/mp4') if supported
+      if('MediaRecorder' in window && MediaRecorder.isTypeSupported('video/mp4')){
+        const stream = encCanvas.captureStream(fps);
+        const mr = new MediaRecorder(stream, {mimeType:'video/mp4'});
+        const chunks=[]; mr.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+        mr.onstop=async()=>{ const blob=new Blob(chunks,{type:'video/mp4'}); await saveBlobInteractive(blob,`blob-tracking-eiei-${W}x${H}@${fps}.mp4`); setStatus('Exported .mp4 (MediaRecorder)'); };
+        mr.start();
+        await runExportFrames(()=>{ ectx.drawImage(canvas,0,0,W,H); });
+        mr.stop();
+      }else{
+        setStatus('Failed to export MP4. Try Chrome/Edge (WebCodecs) or Safari (MediaRecorder).');
+      }
     }finally{
       video.loop=restoreLoop;
       if(wasPaused){ paused=true; video.pause(); } else { video.play(); }
@@ -400,6 +394,7 @@ window.Module = {
       video.requestVideoFrameCallback(step);
     });
   }
+
   async function estimateFPS(v){
     return new Promise(res=>{
       if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(null);
@@ -408,7 +403,21 @@ window.Module = {
       v.requestVideoFrameCallback(cb);
     });
   }
-  function downloadBlob(blob,name){ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),2000); }
+
+  async function saveBlobInteractive(blob, suggestedName){
+    if('showSaveFilePicker' in window){
+      const handle = await showSaveFilePicker({
+        suggestedName,
+        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+      });
+      const w = await handle.createWritable(); await w.write(blob); await w.close();
+    }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=suggestedName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),2000);
+    }
+  }
 })();
 </script>
 </body>
