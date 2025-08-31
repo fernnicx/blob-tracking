@@ -100,7 +100,8 @@ window.Module = {
 
 <!-- App -->
 <script type="module">
-/* Static local import (no CORS/CDN) */
+/* Static local import (no CORS/CDN). Put the mp4-muxer build file here:
+   libs/mp4-muxer.esm.js   (copy of build/mp4-muxer.mjs) */
 import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
 (() => {
@@ -125,6 +126,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       el.addEventListener('change', ()=>{ if(paused) reprocessPaused(); });
     }
   });
+
+  // Changing processing scale requires reinit (mats depend on size).
+  c.scale.addEventListener('change', ()=> start());
 
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
@@ -245,7 +249,14 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
 
-  function reprocessPaused(){ if(!paused) return; detectOnCurrentFrame(false); }
+  // Reprocess CURRENT frame when paused (re-grab + recompute blur)
+  function reprocessPaused(){
+    if(!paused) return;
+    grabToSrc();
+    cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+    detectOnCurrentFrame(false);
+  }
 
   function start(){
     try{
@@ -329,80 +340,74 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   video.onplay = ()=> setStatus('Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* -------- Save to MP4 (WebCodecs + Muxer; Safari MR fallback) -------- */
+  /* -------- Save to MP4 (WebCodecs + Muxer) -------- */
   $('#btnSave').onclick = saveMP4;
 
-  // Save to MP4 (WebCodecs + mp4-muxer; Safari has MR fallback elsewhere)
-async function saveMP4(){
-  if(!video.src || stream){
-    setStatus('Load a file video (.mp4/.mov) first — export from live camera is not supported');
-    return;
+  async function saveMP4(){
+    if (!video.src || stream) {
+      setStatus('Load a file video (.mp4/.mov) first — export from live camera is not supported');
+      return;
+    }
+    const hasWC = ('VideoEncoder' in window) && ('VideoFrame' in window);
+    if (!hasWC) { setStatus('This browser has no WebCodecs — try Safari (MediaRecorder) or Chrome/Edge.'); return; }
+
+    const restoreLoop = video.loop, restoreTime = video.currentTime;
+    const wasPaused = paused; paused = false;
+    video.loop = false; video.currentTime = 0;
+    try { await video.play(); } catch {}
+
+    const fps = await estimateFPS(video) || 30;
+
+    // H.264 requires even dimensions
+    const W = (canvas.width  & ~1);
+    const H = (canvas.height & ~1);
+    const encCanvas = document.createElement('canvas');
+    const ectx = encCanvas.getContext('2d');
+    encCanvas.width = W; encCanvas.height = H;
+
+    try {
+      const bitrate = Math.round(W * H * fps * 0.12);
+      // WebCodecs encoder (FOURCC is correct here)
+      const cfg = { codec:'avc1.42E01E', width:W, height:H, framerate:fps,
+                    hardwareAcceleration:'prefer-hardware', bitrate };
+      const sup = await VideoEncoder.isConfigSupported(cfg);
+
+      // mp4-muxer wants the GENERIC label 'avc'
+      const target = new ArrayBufferTarget();
+      const muxer  = new Muxer({
+        target,
+        fastStart: true,
+        video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
+      });
+
+      const encoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error:  e => console.error(e)
+      });
+      encoder.configure(sup.config);
+
+      await runExportFrames((frameIdx) => {
+        ectx.drawImage(canvas, 0, 0, W, H);
+        const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx * 1e6 / fps) });
+        encoder.encode(vf);
+        vf.close();
+      });
+
+      await encoder.flush();
+      muxer.finalize();
+
+      const blob = new Blob([target.buffer], { type:'video/mp4' });
+      await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
+      setStatus('Exported .mp4');
+    } catch (err) {
+      console.error(err);
+      setStatus('Failed to export MP4. Keep the tab focused and try again (or try Chrome/Edge/Safari).');
+    } finally {
+      video.loop = restoreLoop;
+      if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
+      video.currentTime = restoreTime;
+    }
   }
-  const hasWC = ('VideoEncoder' in window) && ('VideoFrame' in window);
-  if(!hasWC){ setStatus('This browser has no WebCodecs — try Safari (MediaRecorder) or Chrome/Edge.'); return; }
-
-  const restoreLoop = video.loop, restoreTime = video.currentTime;
-  const wasPaused = paused; paused = false;
-  video.loop = false; video.currentTime = 0;
-  await video.play();
-
-  const fps = await estimateFPS(video) || 30;
-
-  // H.264 requires even dimensions — encode from a separate even-sized canvas
-  const W = (canvas.width  & ~1);
-  const H = (canvas.height & ~1);
-  const encCanvas = document.createElement('canvas');
-  const ectx = encCanvas.getContext('2d');
-  encCanvas.width = W; encCanvas.height = H;
-
-  try {
-    // WebCodecs encoder config uses FOURCC (OK)
-    const bitrate = Math.round(W * H * fps * 0.12);
-    const cfg = {
-      codec: 'avc1.42E01E',
-      width: W, height: H, framerate: fps,
-      hardwareAcceleration: 'prefer-hardware',
-      bitrate
-    };
-    const sup = await VideoEncoder.isConfigSupported(cfg);
-
-    // mp4-muxer expects the GENERIC label 'avc' (NOT 'avc1.42E01E')
-    const muxTarget = new ArrayBufferTarget();        // <<< define it!
-    const muxer = new Muxer({
-      target: muxTarget,
-      fastStart: true,
-      video: { codec: 'avc', width: W, height: H, timescale: fps, frameRate: fps }
-    });
-
-    const encoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-      error: e => console.error(e)
-    });
-    encoder.configure(sup.config);
-
-    await runExportFrames((frameIdx) => {
-      ectx.drawImage(canvas, 0, 0, W, H);
-      const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx * 1e6 / fps) });
-      encoder.encode(vf);
-      vf.close();
-    });
-
-    await encoder.flush();
-    muxer.finalize();
-
-    const blob = new Blob([muxTarget.buffer], { type: 'video/mp4' });
-    await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
-    setStatus('Exported .mp4');
-  } catch (err) {
-    console.error(err);
-    setStatus('Failed to export MP4. Try Safari (MediaRecorder) or Chrome/Edge.');
-  } finally {
-    video.loop = restoreLoop;
-    if (wasPaused) { paused = true; video.pause(); } else { video.play(); }
-    video.currentTime = restoreTime;
-  }
-}
-
 
   function runExportFrames(onEncode){
     return new Promise(resolve=>{
