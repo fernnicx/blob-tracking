@@ -6,14 +6,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-  --bg:#0F1115;        /* app background */
-  --panel:#13161A;     /* panels/cards */
-  --canvas:#0E1116;    /* video/canvas surface */
-  --fg:#ECEDEE;        /* primary text */
-  --muted:#A1A7B3;     /* secondary text */
-  --line:#2A2F3A;      /* borders */
-    --accent:#c084fc;
-  --chip:#171A20;      /* subtle chips/pills */
+    /* ChatGPT dark-ish palette */
+    --bg:#0F1115;        /* app background */
+    --panel:#13161A;     /* panels/cards */
+    --canvas:#0E1116;    /* video/canvas surface */
+    --fg:#ECEDEE;        /* primary text */
+    --muted:#A1A7B3;     /* secondary text */
+    --line:#2A2F3A;      /* borders */
+    --accent:#c084fc;    /* slider/button accent */
+    --chip:#171A20;      /* subtle chips/pills */
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -34,17 +35,23 @@
 
   .controls{padding:10px 16px;display:grid;gap:16px}
   .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:18px}
-  /* each panel uses responsive grid, but each control is vertical (label on top, slider full width under it) */
   .panel .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px 24px}
+
   .ctl{display:flex;flex-direction:column;gap:8px}
   .ctl label{color:var(--muted);font-size:13px}
+
   .row-inline{display:flex;align-items:center;gap:10px}
+  /* make Box/Line/Text titles look identical to other labels */
+  .row-inline .ttl{color:var(--muted);font-size:13px;min-width:40px}
+
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
   input[type="range"]{width:100%;accent-color:var(--accent)}
   input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip);cursor:pointer}
   input[type="text"].hex{flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg)}
   .checkline{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
-  .checkline label{display:flex;align-items:center;gap:8px}
+  /* and unify “Show …” label style too */
+  .checkline label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+
   .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .push{flex:1}
@@ -63,10 +70,10 @@
 
   <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
 
-  <!-- Control panels -->
+  <!-- Control panels (no section titles) -->
   <div class="controls">
 
-    <!-- Processing (no title) -->
+    <!-- Processing -->
     <section class="panel">
       <div class="grid">
         <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
@@ -81,28 +88,28 @@
       </div>
     </section>
 
-    <!-- Styling (no title) -->
+    <!-- Styling -->
     <section class="panel">
       <div class="grid">
         <div class="ctl">
           <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
           <input type="range" id="boxThick" min="1" max="8" value="2">
-          <div class="row-inline"><span>Box</span><input type="color" id="colBox"><input id="hexBox" class="hex" value="#FF0000"></div>
+          <div class="row-inline"><label class="ttl">Box</label><input type="color" id="colBox"><input id="hexBox" class="hex" value="#FF0000"></div>
         </div>
         <div class="ctl">
           <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
           <input type="range" id="lineWidth" min="1" max="8" value="2">
-          <div class="row-inline"><span>Line</span><input type="color" id="colLine"><input id="hexLine" class="hex" value="#FF0000"></div>
+          <div class="row-inline"><label class="ttl">Line</label><input type="color" id="colLine"><input id="hexLine" class="hex" value="#FF0000"></div>
         </div>
         <div class="ctl">
           <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
           <input type="range" id="textSize" min="8" max="48" value="14">
-          <div class="row-inline"><span>Text</span><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
+          <div class="row-inline"><label class="ttl">Text</label><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
         </div>
       </div>
     </section>
 
-    <!-- Display (no title) -->
+    <!-- Display -->
     <section class="panel">
       <div class="checkline">
         <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
@@ -118,12 +125,12 @@
 <div class="bar">
   <div class="wrap">
     <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
-    <button id="btnCam" class="primary">Camera</button>
+    <button id="btnCam" class="primary">Camera Mode</button>
     <button id="btnRestart">Restart Video</button>
     <button id="btnPause">Pause</button>
     <button id="btnReset" class="ghost">Reset Settings</button>
     <span class="push"></span>
-    <button id="btnSave" class="primary">Save (.mp4)</button>
+    <button id="btnSave" class="primary">Save</button>
   </div>
 </div>
 
@@ -175,7 +182,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // colors
+  // colors binding
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -214,7 +221,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
 
-  // color conversion constant (guard against undefined)
+  /* mirror flag: true when using live camera */
+  let mirror=false;
+
+  // color conversion const
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
     COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY === 'number') ? cv.COLOR_RGBA2GRAY : cv.COLOR_RGB2GRAY;
@@ -244,7 +254,14 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   function grabToSrc(){
     if(!src) return false;
-    bctx.drawImage(video,0,0,procW,procH);
+    // draw into processing buffer (mirrored if needed)
+    if(mirror){
+      bctx.save(); bctx.scale(-1,1);
+      bctx.drawImage(video, -procW, 0, procW, procH);
+      bctx.restore();
+    }else{
+      bctx.drawImage(video,0,0,procW,procH);
+    }
     const im=bctx.getImageData(0,0,procW,procH);
     src.data.set(im.data);
     return true;
@@ -254,18 +271,28 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.globalCompositeOperation='source-over';
     ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // background (mirrored if camera)
+    ctx.save();
+    if(mirror){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    ctx.restore();
+
+    const X = x => mirror ? (canvas.width - x) : x;
 
     // boxes
     if(c.showBoxes.checked){
       ctx.lineWidth=+c.boxThick.value;
       ctx.strokeStyle=hexBox.value;
-      boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
+      boxes.forEach(r=>{
+        const dx = mirror ? (canvas.width - (r.x + r.w)) : r.x;
+        ctx.strokeRect(dx, r.y, r.w, r.h);
+      });
     }
 
     // links
     if(c.showLinks.checked){
-      const pts=[...objs.values()].map(([x,y])=>({x,y}));
+      const pts=[...objs.values()].map(([x,y])=>({x:X(x),y}));
       const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
       for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
         const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
@@ -276,15 +303,21 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     // trails
     if(c.showTrail.checked && maxTrail>0){
       ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
-      for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
+      for(const arr of trails.values()){
+        if(arr.length<2) continue;
+        ctx.beginPath(); ctx.moveTo(X(arr[0].x),arr[0].y);
+        for(let k=1;k<arr.length;k++) ctx.lineTo(X(arr[k].x),arr[k].y);
+        ctx.stroke();
+      }
     }
 
     // ids / coords
     ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
     for(const [id,[cx,cy]] of objs.entries()){
-      ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+      const dx = X(cx);
+      ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill();
       const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
-      ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
+      ctx.fillStyle=hexText.value; ctx.fillText(txt,dx+8,cy-8);
     }
   }
 
@@ -376,6 +409,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   /* ------ sources & UI ------ */
   $('#fileInput').onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
+    mirror = false;                        // files are not mirrored
     video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
     try{ URL.revokeObjectURL(video.src); }catch{}
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
@@ -383,8 +417,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   $('#btnCam').onclick=async()=>{
     try{
       if(stream){ stream.getTracks().forEach(t=>t.stop()); }
-      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
-      stream=s; video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started');
+      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:'user'},audio:false});
+      stream=s; mirror = true;             // mirror live camera like a selfie preview
+      video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started (mirrored)');
     }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
   };
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
@@ -409,7 +444,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   /* -------- Save to MP4 (WebCodecs + mp4-muxer) -------- */
 
-  // Open the file picker immediately (user gesture) and hand back a writer (or null on iOS/etc.)
   async function getSaveWriter(suggestedName){
     if (!('showSaveFilePicker' in window)) return null; // iOS/Safari fallback
     try{
@@ -425,25 +459,15 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   }
 
   $('#btnSave').addEventListener('click', async () => {
-    // guard: not from camera
-    if (!video.src || stream) {
-      setStatus('Load a video file first — export from live camera is not supported');
-      return;
-    }
-    // estimate FPS early (still in same turn is ok if we picker before awaits)
+    if (!video.src || stream) { setStatus('Load a video file first — export from live camera is not supported'); return; }
     const fps = await estimateFPS(video) || 30;
     const W0=(canvas.width&~1), H0=(canvas.height&~1);
     const suggested = `blob-tracking-${W0}x${H0}@${fps}.mp4`;
-
-    // open save writer *before* any long awaits (keeps the user gesture)
     const writer = await getSaveWriter(suggested);
-
-    // then run the encoder & muxer and write/ download at the end
     await saveViaWebCodecs(writer, suggested, fps);
   });
 
   function chooseProfile(width,height,fps,bitrate){
-    // Prefer High@4.0 for HD, then Main@3.1, then Baseline@3.0 as last resort.
     return [
       {codec:'avc1.640028', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // High@4.0
       {codec:'avc1.4D401F', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Main@3.1
@@ -457,13 +481,12 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     video.loop=false; video.currentTime=0;
     try{ await video.play(); }catch{}
 
-    // dimensions (even) – keep original canvas size; some profiles may downlevel, but we don't downscale here
     const W=(canvas.width&~1), H=(canvas.height&~1);
     const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H;
     const ectx=encCanvas.getContext('2d');
 
     try{
-      const bitrate = Math.max(300_000, Math.round(W*H*fps*0.10)); // simple target rate
+      const bitrate = Math.max(300_000, Math.round(W*H*fps*0.10));
       let cfg=null;
       for(const c of chooseProfile(W,H,fps,bitrate)){
         const sup = await VideoEncoder.isConfigSupported(c).catch(()=>null);
@@ -474,8 +497,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       const target=new ArrayBufferTarget();
       const muxer = new Muxer({
         target,
-        fastStart: 'in-memory',              // moov before mdat = safest for players
-        firstTimestampBehavior: 'offset',    // fix non-zero DTS from rVFC
+        fastStart: 'in-memory',
+        firstTimestampBehavior: 'offset',
         video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
       });
 
@@ -538,7 +561,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
         cv.cvtColor(src, gray, COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0);
         detectOnCurrentFrame(true);
-        onEncode(i++);                  // we keep our own strictly-monotonic index
+        onEncode(i++);
         video.requestVideoFrameCallback(step);
       };
       video.requestVideoFrameCallback(step);
