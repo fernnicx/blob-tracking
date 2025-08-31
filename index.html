@@ -18,19 +18,22 @@
   }
   header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
   h1{margin:0;font-size:18px}
-  #stageWrap{padding:12px 16px 84px}
+  #stageWrap{padding:12px 16px 96px}
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
 
-  /* centered status under the video, above controls */
+  /* centered status under the video */
   .status{
-    display:block; max-width:min(1400px,98vw); margin:10px auto 14px;
+    display:block; max-width:min(1400px,98vw); margin:10px auto 16px;
     padding:10px 14px; text-align:center;
     border-radius:12px; font-size:14px; letter-spacing:.2px;
     background:var(--chip); color:var(--muted); border:1px solid var(--line);
   }
 
-  .controls{padding:10px 16px}
+  /* sections */
+  .controls{padding:10px 16px; max-width:min(1400px,98vw); margin:0 auto;}
+  .section{border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:rgba(26,21,38,.4); margin-bottom:12px;}
+  .section h2{margin:0 0 8px; font-size:14px; color:var(--muted); font-weight:600; letter-spacing:.2px}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:center}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   label{font-size:13px;color:var(--muted)}
@@ -55,35 +58,67 @@
   <video id="video" playsinline muted></video>
   <canvas id="buf"></canvas>
 
-  <!-- centered status bar under video -->
+  <!-- centered status under video -->
   <div id="status" class="status">Loading OpenCV.js…</div>
 
   <div class="controls">
-    <div class="grid">
-      <!-- sizes -->
-      <div class="row"><label>Box Thickness <span id="boxWVal" class="badge">2</span></label><input type="range" id="boxW" min="1" max="8" value="2"></div>
-      <div class="row"><label>Line Width <span id="lineWVal" class="badge">2</span></label><input type="range" id="lineW" min="1" max="6" value="2"></div>
-      <div class="row"><label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label><input type="range" id="textSize" min="10" max="28" value="14"></div>
-
-      <!-- processing -->
-      <div class="row"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
-      <div class="row"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
-      <div class="row"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
-      <div class="row"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
-      <div class="row"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
-      <div class="row"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
-      <div class="row"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
-      <div class="row"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
-      <div class="row"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
-
-      <!-- colors -->
-      <div class="row" style="grid-column:1/-1;gap:18px">
-        <span class="row"><label>Box</label><input type="color" id="colBox"><input class="hex" id="hexBox" value="#FF0000"></span>
-        <span class="row"><label>Line</label><input type="color" id="colLine"><input class="hex" id="hexLine" value="#FF0000"></span>
-        <span class="row"><label>Text</label><input type="color" id="colText"><input class="hex" id="hexText" value="#EEEEEE"></span>
+    <!-- SECTION 1: Processing (everything except styling sliders) -->
+    <div class="section">
+      <h2>Processing</h2>
+      <div class="grid">
+        <div class="row"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
+        <div class="row"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
+        <div class="row"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
+        <div class="row"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
+        <div class="row"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
+        <div class="row"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
+        <div class="row"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
+        <div class="row"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
+        <div class="row"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
       </div>
+    </div>
 
-      <div class="row" style="grid-column:1/-1;gap:18px">
+    <!-- SECTION 2: Styling (thickness/width/size + colors) -->
+    <div class="section">
+      <h2>Styling</h2>
+      <div class="grid">
+        <div class="row">
+          <label>Box Thickness <span id="boxWVal" class="badge">2</span></label>
+          <input type="range" id="boxW" min="1" max="8" value="2">
+          <span class="row" style="margin-left:12px">
+            <label>Box</label>
+            <input type="color" id="colBox">
+            <input class="hex" id="hexBox" value="#FF0000">
+          </span>
+        </div>
+
+        <div class="row">
+          <label>Line Width <span id="lineWVal" class="badge">2</span></label>
+          <input type="range" id="lineW" min="1" max="6" value="2">
+          <span class="row" style="margin-left:12px">
+            <label>Line</label>
+            <input type="color" id="colLine">
+            <input class="hex" id="hexLine" value="#FF0000">
+          </span>
+        </div>
+
+        <div class="row">
+          <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
+          <input type="range" id="textSize" min="10" max="28" value="14">
+          <span class="row" style="margin-left:12px">
+            <label>Text</label>
+            <input type="color" id="colText">
+            <input class="hex" id="hexText" value="#EEEEEE">
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: Toggles -->
+    <div class="section">
+      <h2>Display</h2>
+      <div class="row" style="gap:18px">
+        <label>Show Boxes <input type="checkbox" id="showBox" checked></label>
         <label>Show Coords <input type="checkbox" id="showCoord" checked></label>
         <label>Show Trails <input type="checkbox" id="showTrail" checked></label>
         <label>Show Links <input type="checkbox" id="showLinks" checked></label>
@@ -101,7 +136,7 @@
     <button id="btnPause">Pause</button>
     <button id="btnReset" class="ghost">Reset to Default</button>
     <span class="push"></span>
-    <button id="btnSave" class="primary">Save (.mp4)</button>
+    <button id="btnSave" class="primary">Save (video)</button>
   </div>
 </div>
 
@@ -130,7 +165,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
-    showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks')
+    showBox:$('#showBox'), showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks')
   };
   const b={
     boxWVal:$('#boxWVal'), lineWVal:$('#lineWVal'), textSizeVal:$('#textSizeVal'),
@@ -191,7 +226,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
 
-  // color conversion constant (guard against undefined)
+  // color conversion constant
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
     COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY === 'number') ? cv.COLOR_RGBA2GRAY : cv.COLOR_RGB2GRAY;
@@ -233,13 +268,14 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
-    // stroke sizes
     const boxThickness = +c.boxW.value;
     const lineWidth = +c.lineW.value;
     const txtSize = +c.textSize.value;
 
-    ctx.lineWidth=boxThickness; ctx.strokeStyle=hexBox.value;
-    boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
+    if (c.showBox.checked){
+      ctx.lineWidth=boxThickness; ctx.strokeStyle=hexBox.value;
+      boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
+    }
 
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
@@ -256,8 +292,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.font=`${txtSize}px Helvetica, Arial, ui-sans-serif, system-ui`;
     for(const [id,[cx,cy]] of objs.entries()){
       ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,Math.max(2, lineWidth+1),0,Math.PI*2); ctx.fill();
-      const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
-      ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
+      if (c.showCoord.checked){
+        ctx.fillStyle=hexText.value; ctx.fillText(`${cx.toFixed(2)}, ${cy.toFixed(2)}`,cx+8,cy-8);
+      }
     }
   }
 
@@ -372,7 +409,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     hexBox.value='#FF0000'; colBox.value='#FF0000';
     hexLine.value='#FF0000'; colLine.value='#FF0000';
     hexText.value='#EEEEEE'; colText.value='#EEEEEE';
-    c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
+    c.showBox.checked=c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
     start();
   };
   video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
@@ -380,26 +417,42 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
   /* -------- Save (gesture-safe picker + WC/MR paths) -------- */
-
-  // Ask destination during the click gesture, then export.
   $('#btnSave').onclick = async () => {
-    const dest = await prepareSaveDestination('blob-tracking.mp4');
-    try { await saveMP4(dest); }
+    const mode = pickSaveMode();                     // decide before picker
+    const dest = await prepareSaveDestination(`blob-tracking.${mode.ext}`, mode.ext);
+    try { await saveVideo(mode, dest); }
     catch(e){ console.error(e); setStatus('Save failed: ' + (e.message||e)); }
   };
 
+  function supportsWebCodecs(){ return ('VideoEncoder' in window) && ('VideoFrame' in window); }
+  function supportsMediaRecorder(){ try{ return 'MediaRecorder' in window; }catch{ return false; } }
+
+  function pickRecorderMime(){
+    if (MediaRecorder.isTypeSupported('video/mp4;codecs=h264')) return {mime:'video/mp4;codecs=h264', ext:'mp4'};
+    if (MediaRecorder.isTypeSupported('video/mp4')) return {mime:'video/mp4', ext:'mp4'};
+    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) return {mime:'video/webm;codecs=vp9', ext:'webm'};
+    return {mime:'video/webm', ext:'webm'};
+  }
+
+  function pickSaveMode(){
+    if (supportsWebCodecs()) return {kind:'wc', mime:'video/mp4', ext:'mp4'};
+    if (supportsMediaRecorder()) return {kind:'mr', ...pickRecorderMime()};
+    return {kind:'none', mime:'', ext:'mp4'};
+  }
+
   // Must be called while still in user gesture
-  async function prepareSaveDestination(defaultName){
+  async function prepareSaveDestination(defaultName, ext){
     if('showSaveFilePicker' in window){
       try{
+        const accept = ext==='webm' ? {'video/webm':['.webm']} : {'video/mp4':['.mp4']};
         const handle = await showSaveFilePicker({
           suggestedName: defaultName,
-          types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+          types:[{description: ext.toUpperCase()+' Video', accept}],
         });
-        return {kind:'fs', handle};
-      }catch{ return {kind:'download'}; } // user cancelled
+        return {kind:'fs', handle, ext};
+      }catch{ /* user cancelled */ }
     }
-    return {kind:'download'};
+    return {kind:'download', ext};
   }
 
   async function saveBlobInteractive(blob, suggestedName, dest){
@@ -413,28 +466,19 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
 
-  function supportsWebCodecs(){ return ('VideoEncoder' in window) && ('VideoFrame' in window); }
-  function supportsMediaRecorder(){ try{ return 'MediaRecorder' in window; }catch{ return false; } }
-
-  async function saveMP4(dest){
-    if(!video.src && !stream){ setStatus('Load a file or start camera first'); return; }
-
-    if(supportsWebCodecs()){
-      await saveViaWebCodecs(dest); return;
-    }
-    if(supportsMediaRecorder()){
-      await saveViaMediaRecorder(dest); return;
-    }
+  async function saveVideo(mode, dest){
+    if (mode.kind==='wc') return saveViaWebCodecs(dest);
+    if (mode.kind==='mr') return saveViaMediaRecorder(dest);
     setStatus('No supported export path in this browser.');
   }
 
-  // ---------- WebCodecs + mp4-muxer (Chromium desktop, some Android) ----------
+  /* ---------- WebCodecs + mp4-muxer ---------- */
   function chooseProfile(width,height,fps,bitrate){
     const bases = ['avc1.640028','avc1.4D4020','avc1.42E01E']; // High/Main/Baseline
     return bases.map(codec => ({codec,width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate}));
   }
   function clampToH264Area(W,H){
-    const MAX_AREA_BASELINE = 414720; // level 3.0
+    const MAX_AREA_BASELINE = 414720; // H.264 Level 3.0 coded area
     if (W*H <= MAX_AREA_BASELINE) return {W, H};
     const s = Math.sqrt(MAX_AREA_BASELINE/(W*H));
     const w = (Math.floor(W*s) & ~1), h = (Math.floor(H*s) & ~1);
@@ -460,7 +504,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       const sup = await VideoEncoder.isConfigSupported(cfg).catch(()=>null);
       if(sup?.supported){ ok=sup.config; break; }
     }
-    if(!ok){ setStatus('Encoder config not supported for this size; try smaller scale.'); return; }
+    if(!ok){ setStatus('Encode size unsupported; try smaller scale.'); return; }
 
     const target=new ArrayBufferTarget();
     const muxer = new Muxer({
@@ -485,7 +529,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       encoder.encode(vf);
       vf.close();
       done = Math.min(total, frameIdx+1);
-      setStatus(`Saving… ${Math.round(done*100/total)}%`);
+      setStatus(`Saving (MP4/H.264)… ${Math.round(done*100/total)}%`);
     });
 
     await encoder.flush();
@@ -493,20 +537,19 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
     const blob=new Blob([target.buffer],{type:'video/mp4'});
     await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`, dest);
-    setStatus('Exported .mp4');
+    setStatus('Exported MP4');
 
     video.loop=restoreLoop;
     if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
     video.currentTime=restoreTime;
   }
 
-  // ---------- MediaRecorder fallback (iOS/macOS Safari, etc.) ----------
+  /* ---------- MediaRecorder fallback (Safari/iOS etc.) ---------- */
   async function saveViaMediaRecorder(dest){
     const fps = await estimateFPS(video) || 30;
+    const rec = pickRecorderMime();                    // decide mime/extension
     const stream = canvas.captureStream(fps);
-    const type = MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' :
-                 (MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm');
-    const mr = new MediaRecorder(stream,{mimeType:type, videoBitsPerSecond: 6_000_000});
+    const mr = new MediaRecorder(stream,{mimeType: rec.mime, videoBitsPerSecond: 6_000_000});
     const chunks=[];
     mr.ondataavailable = e=>{ if(e.data?.size) chunks.push(e.data); };
     const finished = new Promise(res=>{ mr.onstop=res; });
@@ -516,21 +559,20 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     mr.start();
 
     await driveFrames(()=>{
-      // just draw/track; MediaRecorder grabs canvas frames
-      done++; setStatus(`Saving… ${Math.round(done*100/total)}%`);
+      done++; setStatus(`Saving (${rec.ext.toUpperCase()})… ${Math.round(done*100/total)}%`);
     });
 
     mr.stop(); await finished;
-    const blob=new Blob(chunks,{type});
-    await saveBlobInteractive(blob, 'blob-tracking.mp4', dest);
-    setStatus('Exported video');
+    const blob=new Blob(chunks,{type: rec.mime});
+    await saveBlobInteractive(blob, `blob-tracking.${rec.ext}`, dest);
+    setStatus(`Exported ${rec.ext.toUpperCase()}`);
   }
 
   function driveFrames(onEncode){
     return new Promise(resolve=>{
       const step=(_,meta)=>{
         if(video.ended){ resolve(); return; }
-        ensureMats(); if(!grabToSrc()){ resolve(); return; return; }
+        ensureMats(); if(!grabToSrc()){ resolve(); return; }
         cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
         detectOnCurrentFrame(true);
