@@ -337,72 +337,110 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   /* -------- Save to MP4 (WebCodecs + Muxer) -------- */
   $('#btnSave').onclick = saveMP4;
 
-  async function saveMP4(){
-    if (!video.src || stream) {
-      setStatus('Load a file video (.mp4/.mov) first — export from live camera is not supported');
-      return;
-    }
-    const hasWC = ('VideoEncoder' in window) && ('VideoFrame' in window);
-    if (!hasWC) { setStatus('This browser has no WebCodecs — try Safari (MediaRecorder) or Chrome/Edge.'); return; }
-
-    exporting = true;
-    const restoreLoop = video.loop, restoreTime = video.currentTime;
-    const wasPaused = paused; paused = false;
-    video.loop = false; video.currentTime = 0;
-    try { await video.play(); } catch {}
-
-    const fps = await estimateFPS(video) || 30;
-    const W = (canvas.width  & ~1), H = (canvas.height & ~1);
-    const encCanvas = document.createElement('canvas');
-    const ectx = encCanvas.getContext('2d');
-    encCanvas.width = W; encCanvas.height = H;
-
-    try {
-      const bitrate = Math.round(W * H * fps * 0.12);
-      const cfg = { codec:'avc1.42E01E', width:W, height:H, framerate:fps,
-                    hardwareAcceleration:'prefer-hardware', bitrate };
-      const sup = await VideoEncoder.isConfigSupported(cfg);
-
-      // local buffer + muxer (note: codec name must be 'avc' here)
-      const target = new ArrayBufferTarget();
-const opts = {
-  target,
-  fastStart: 'in-memory',            // <- ASCII hyphen
-  video: { codec: 'avc', width: W, height: H, timescale: fps, frameRate: fps }
-};
-console.log('fastStart =', JSON.stringify(opts.fastStart)); // should print "in-memory"
-const muxer = new Muxer(opts);
-
-
-      const encoder = new VideoEncoder({
-        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-        error:  e => console.error(e)
-      });
-      encoder.configure(sup.config);
-
-      await runExportFrames((frameIdx) => {
-        ectx.drawImage(canvas, 0, 0, W, H);
-        const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx * 1e6 / fps) });
-        encoder.encode(vf);
-        vf.close();
-      });
-
-      await encoder.flush();
-      muxer.finalize();
-
-      const blob = new Blob([target.buffer], { type:'video/mp4' });
-      await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
-      setStatus('Exported .mp4');
-    } catch (err) {
-      console.error(err);
-      setStatus('Failed to export MP4. Keep the tab focused and try again (or try Chrome/Edge/Safari).');
-    } finally {
-      exporting = false;
-      video.loop = restoreLoop;
-      if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
-      video.currentTime = restoreTime;
-    }
+// ---- replace your saveMP4() with this version ----
+async function saveMP4(){
+  if (!video.src || stream) {
+    setStatus('Load a file video (.mp4/.mov) first — export from live camera is not supported');
+    return;
   }
+  const hasWC = ('VideoEncoder' in window) && ('VideoFrame' in window);
+  if (!hasWC) { setStatus('This browser has no WebCodecs — try Safari (MediaRecorder) or Chrome/Edge.'); return; }
+
+  const restoreLoop = video.loop, restoreTime = video.currentTime;
+  const wasPaused = paused; paused = false;
+  video.loop = false; video.currentTime = 0;
+  try { await video.play(); } catch {}
+
+  const fps = await estimateFPS(video) || 30;
+
+  // H.264 requires even dimensions. Level 4.0 max coded area = 2,097,152.
+  const MAX_CODED_AREA_L40 = 2097152;
+
+  let W = (canvas.width  & ~1);
+  let H = (canvas.height & ~1);
+  const area = W * H;
+  if (area > MAX_CODED_AREA_L40) {
+    const s = Math.sqrt(MAX_CODED_AREA_L40 / area);
+    W = Math.max(2, (Math.floor(W * s) & ~1));
+    H = Math.max(2, (Math.floor(H * s) & ~1));
+  }
+
+  const encCanvas = document.createElement('canvas');
+  const ectx = encCanvas.getContext('2d');
+  encCanvas.width = W; encCanvas.height = H;
+
+  // Try a few codec strings (Baseline/Main/High), all at Level 4.1.
+  const codecCandidates = [
+    'avc1.42E029', // Baseline L4.1
+    'avc1.4D0029', // Main     L4.1
+    'avc1.640029'  // High     L4.1
+  ];
+
+  const bitrate = Math.round(W * H * fps * 0.12);
+  const target = new ArrayBufferTarget();
+  let muxer, encoder;
+
+  try {
+    muxer  = new Muxer({
+      target,
+      fastStart: 'in-memory',
+      video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
+    });
+
+    encoder = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error:  e => console.error(e)
+    });
+
+    let configured = false;
+    let lastErr = null;
+    for (const codecStr of codecCandidates) {
+      try {
+        const cfg = {
+          codec: codecStr,
+          width: W, height: H,
+          framerate: fps,
+          hardwareAcceleration: 'prefer-hardware',
+          bitrate
+        };
+        const sup = await VideoEncoder.isConfigSupported(cfg);
+        encoder.configure(sup.config);
+        configured = true;
+        break;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!configured) {
+      throw lastErr || new Error('No H.264 configuration supported by this system.');
+    }
+
+    await runExportFrames((frameIdx) => {
+      ectx.drawImage(canvas, 0, 0, W, H);
+      const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx * 1e6 / fps) });
+      try { encoder.encode(vf); } finally { vf.close(); }
+    });
+
+    await encoder.flush();
+    encoder.close();
+    muxer.finalize();
+
+    const blob = new Blob([target.buffer], { type:'video/mp4' });
+    await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
+    setStatus('Exported .mp4');
+  } catch (err) {
+    console.error(err);
+    try { encoder && encoder.close(); } catch {}
+    setStatus(
+      'Failed to export MP4. Tip: keep the tab focused. If it still fails, lower the video size (scale down) or try Chrome/Edge.'
+    );
+  } finally {
+    video.loop = restoreLoop;
+    if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
+    video.currentTime = restoreTime;
+  }
+}
+
 
   function runExportFrames(onEncode){
     return new Promise(resolve=>{
