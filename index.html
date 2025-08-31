@@ -519,7 +519,7 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
 
         // recompute + draw overlay (export path owns the processing)
         grabToSrc();
-        cv.cvtColor(src,gray,cv.CV_RGBA2GRAY);
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY); 
         cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
         detectOnCurrentFrame(true);
 
