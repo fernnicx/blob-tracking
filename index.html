@@ -323,70 +323,63 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
 // Works in Chromium browsers over HTTPS (GitHub Pages = OK). Falls back to download elsewhere.
 
 async function saveMP4(){
-  if (!video.src || stream) {
-    setStatus('Load a file video first — export from live camera is not supported');
-    return;
-  }
-  if (!('VideoEncoder' in window) || !('VideoFrame' in window)) {
-    setStatus('This browser has no WebCodecs — try Chrome/Edge/Safari.');
-    return;
-  }
+  // Guard rails
+  if (!video.src || stream) { setStatus('Load a file video first (camera export not supported)'); return; }
+  if (!('VideoEncoder' in window) || !('VideoFrame' in window)) { setStatus('No WebCodecs — try Chrome/Edge/Safari.'); return; }
 
-  // ---- Ask for the destination FIRST (user sees the Save dialog immediately)
+  // --- Try to open the Save dialog first; fall back if not available or user cancels.
   let writable = null;
-  let useStreaming = 'showSaveFilePicker' in window;
-  if (useStreaming) {
+  let streaming = false;
+  if (window.isSecureContext && 'showSaveFilePicker' in window) {
     try {
       const handle = await showSaveFilePicker({
         suggestedName: 'blob-tracking.mp4',
         types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
       });
-      writable = await handle.createWritable();
-    } catch (err) {
-      setStatus('Save canceled.');
-      return;
+      writable = await handle.createWritable();            // dialog shows here
+      streaming = true;
+      setStatus('Saving… (streaming to file)');
+    } catch (e) {
+      // If they canceled, we’ll fall back to download at the end
+      console.log('File picker not used -> fallback to download', e);
+      setStatus('Saving… (will download when finished)');
+      streaming = false;
     }
+  } else {
+    setStatus('Saving… (file picker unavailable — will download when finished)');
   }
 
-  // ---- Prep playback
+  // Playback prep
   const restoreLoop = video.loop, restoreTime = video.currentTime;
   const wasPaused = paused; paused = false;
   video.loop = false; video.currentTime = 0;
   try { await video.play(); } catch {}
 
-  // ---- FPS + dimensions (even) + coded-area limit (L4.0/4.1)
+  // FPS + even dimensions + level safe coded area
   let fps = await estimateFPS(video) || 30;
-  let W = (canvas.width  & ~1);
-  let H = (canvas.height & ~1);
-  const MAX_CODED_AREA = 2097152;              // 1920*1088 for L4.0/4.1
+  let W = (canvas.width  & ~1), H = (canvas.height & ~1);
+  const MAX_CODED_AREA = 2097152; // 1920*1088 (L4.x)
   if (W*H > MAX_CODED_AREA) {
     const s = Math.sqrt(MAX_CODED_AREA / (W*H));
     W = (Math.max(2, Math.floor(W*s)) & ~1);
     H = (Math.max(2, Math.floor(H*s)) & ~1);
   }
 
-  // ---- Encoding canvas
   const encCanvas = document.createElement('canvas');
   const ectx = encCanvas.getContext('2d');
   encCanvas.width = W; encCanvas.height = H;
 
-  const bitrate = Math.round(W * H * fps * 0.12);
+  const bitrate = Math.round(W*H*fps*0.12);
 
-  // Try several H.264 profiles/levels
-  const codecTry = [
-    'avc1.640029','avc1.4D0029','avc1.420029', // High/Main/Baseline L4.1
-    'avc1.640028','avc1.4D0028','avc1.420028'  // High/Main/Baseline L4.0
-  ];
-
-  // ---- Choose target: streaming to file if possible, else in-memory
-  const target = useStreaming
+  // Target: stream to disk if we got a writable, otherwise buffer in memory
+  const target = streaming
     ? new FileSystemWritableFileStreamTarget(writable, { chunkSize: 1<<20 })
     : new ArrayBufferTarget();
 
   const muxer  = new Muxer({
     target,
-    fastStart: useStreaming ? 'fragmented' : 'in-memory',
-    minFragmentDuration: 1,         // ~1s fragments when streaming
+    fastStart: streaming ? 'fragmented' : 'in-memory',
+    minFragmentDuration: 1,
     video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
   });
 
@@ -395,26 +388,76 @@ async function saveMP4(){
     error:  e => console.error(e)
   });
 
-  // Configure encoder with the first supported codec string
+  // Try a few H.264 profiles/levels
+  const tries = ['avc1.640029','avc1.4D0029','avc1.420029','avc1.640028','avc1.4D0028','avc1.420028'];
   let configured = false, lastErr = null;
-  for (const codec of codecTry) {
-    try{
-      const sup = await VideoEncoder.isConfigSupported({
-        codec, width: W, height: H, framerate: fps,
-        hardwareAcceleration: 'prefer-hardware', bitrate
-      });
+  for (const codec of tries) {
+    try {
+      const sup = await VideoEncoder.isConfigSupported({ codec, width:W, height:H, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate });
       encoder.configure(sup.config);
-      configured = true;
-      break;
-    }catch(e){ lastErr = e; }
+      configured = true; break;
+    } catch(e){ lastErr = e; }
   }
   if (!configured) {
     try{ encoder.close(); }catch{}
+    if (streaming && writable) { try{ await writable.close(); }catch{} }
     setStatus('No supported H.264 profile/level for this size on this device.');
     console.error(lastErr);
-    restorePlayback();
+    restore();
     return;
   }
+
+  // Encode every displayed frame
+  const dur = isFinite(video.duration) ? video.duration : null;
+  let frameIdx = 0;
+  try {
+    await new Promise(resolve=>{
+      const step = (_, meta) => {
+        if (video.ended || (dur && video.currentTime >= dur - 0.0009)) return resolve();
+
+        ectx.drawImage(canvas, 0, 0, W, H);
+        const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx++ * 1e6 / fps) });
+        encoder.encode(vf);
+        vf.close();
+
+        if (dur) setStatus(`Saving… ${Math.min(100, Math.round(video.currentTime*100/dur))}%`);
+        video.requestVideoFrameCallback(step);
+      };
+      video.requestVideoFrameCallback(step);
+    });
+
+    await encoder.flush();
+    try{ encoder.close(); }catch{}
+    muxer.finalize();
+
+    if (streaming && writable) {
+      await writable.close();       // file already written progressively
+      setStatus('Saved to disk ✔');
+    } else {
+      const blob = new Blob([target.buffer], { type:'video/mp4' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `blob-tracking-${W}x${H}@${fps}.mp4`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+      setStatus('Downloaded ✔');
+    }
+  } catch (err) {
+    console.error(err);
+    setStatus('Failed to export MP4.');
+    try{ encoder.close(); }catch{}
+    if (streaming && writable) { try{ await writable.close(); }catch{} }
+  } finally {
+    restore();
+  }
+
+  function restore(){
+    video.loop = restoreLoop;
+    if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
+    video.currentTime = restoreTime;
+  }
+}
+
 
   // ---- Export loop with progress
   const dur = isFinite(video.duration) ? video.duration : null;
