@@ -200,4 +200,232 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
     ctx.font='14px ui-sans-serif,system-ui';
-    for(const [id,[cx,cy]] of
+    for(const [id,[cx,cy]] of objs.entries()){
+      ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+      const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
+      ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
+    }
+  }
+
+  function detectOnCurrentFrame(updateTracker=true){
+    const alpha=Math.min(1,Math.max(0,+c.alpha.value/100));
+    if(!paused){ cv.addWeighted(bg,(1-alpha),blur,alpha,0,bg); } // freeze bg while paused
+
+    cv.absdiff(blur,bg,diff);
+    cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
+
+    const it=+c.morph.value;
+    if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
+
+    contours?.delete(); hierarchy?.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
+    cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+
+    const minArea=+c.minArea.value*scale*scale;
+    const boxes=[], centers=[];
+    for(let i=0;i<contours.size();i++){
+      const cnt=contours.get(i), area=cv.contourArea(cnt); if(area<minArea) continue;
+      const r=cv.boundingRect(cnt); const x=r.x/scale, y=r.y/scale, w=r.width/scale, h=r.height/scale;
+      boxes.push({x,y,w,h}); centers.push([x+w/2,y+h/2]);
+    }
+
+    let objs=new Map();
+    if(updateTracker){
+      tracker.maxDistance=+c.maxDist.value; tracker.maxDisappeared=+c.maxDisappear.value;
+      objs=tracker.update(centers);
+      const active=new Set(objs.keys()); for(const id of [...trails.keys()]) if(!active.has(id)) trails.delete(id);
+      const maxTrail=+c.trailLen.value;
+      for(const [id,[cx,cy]] of objs.entries()){
+        if(!trails.has(id)) trails.set(id,[]);
+        const arr=trails.get(id); arr.push({x:cx,y:cy}); while(arr.length>maxTrail) arr.shift();
+      }
+      drawOverlayFromDetections(boxes, objs, +c.trailLen.value);
+    }else{
+      centers.forEach((p,i)=>objs.set(i,p));
+      drawOverlayFromDetections(boxes, objs, 0);
+    }
+  }
+
+  function reprocessPaused(){ if(!paused) return; detectOnCurrentFrame(false); }
+
+  function start(){
+    try{
+      cleanup();
+      const vw=video.videoWidth||640, vh=video.videoHeight||360;
+      canvas.width=vw; canvas.height=vh;
+      scale=Math.max(0.3, Math.min(1, +c.scale.value/100));
+      procW=Math.max(64, Math.round(vw*scale)); procH=Math.max(36, Math.round(vh*scale));
+      buf.width=procW; buf.height=procH;
+
+      src=new cv.Mat(procH,procW,cv.CV_8UC4);
+      gray=new cv.Mat(procH,procW,cv.CV_8UC1);
+      blur=new cv.Mat(procH,procW,cv.CV_8UC1);
+      bg=new cv.Mat(procH,procW,cv.CV_8UC1);
+      diff=new cv.Mat(procH,procW,cv.CV_8UC1);
+      thr=new cv.Mat(procH,procW,cv.CV_8UC1);
+      kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));
+      contours=new cv.MatVector(); hierarchy=new cv.Mat();
+
+      grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY); cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
+      setStatus(`Running • ${vw}×${vh} (proc ${procW}×${procH})`);
+      paused=false; loop();
+    }catch(err){ console.error(err); setStatus('Start failed: '+err.message); }
+  }
+  window.__start=start;
+
+  function loop(){
+    animId=requestAnimationFrame(loop);
+    try{
+      if(!paused){
+        grabToSrc();
+        cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+        detectOnCurrentFrame(true);
+      }
+    }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
+  }
+
+  /* Sources & UI */
+  $('#fileInput').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
+    const canQT=!!video.canPlayType && video.canPlayType('video/quicktime');
+    const canMP4=!!video.canPlayType && (video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') || video.canPlayType('video/mp4'));
+    if((f.type||'').includes('quicktime') && !canQT && !canMP4){ setStatus('This browser cannot play .mov — convert to .mp4 (H.264).'); return; }
+    try{ URL.revokeObjectURL(video.src); }catch{}
+    video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
+  };
+  $('#btnCam').onclick=async()=>{
+    try{
+      if(stream){ stream.getTracks().forEach(t=>t.stop()); }
+      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
+      stream=s; video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started');
+    }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
+  };
+  $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
+  $('#btnPause').onclick=()=>{
+    if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; }
+    paused=!paused;
+    if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); $('#btnPause').textContent='Resume'; reprocessPaused(); }
+    else{ video.play(); setStatus('Playing…'); $('#btnPause').textContent='Pause'; if(animId===null) loop(); }
+  };
+  $('#btnReset').onclick=()=>{
+    const d={scale:60,minArea:1200,thresh:200,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20};
+    c.scale.value=d.scale; b.scaleVal.textContent=d.scale;
+    c.minArea.value=d.minArea; b.minAreaVal.textContent=d.minArea;
+    c.thresh.value=d.thresh; b.threshVal.textContent=d.thresh;
+    c.morph.value=d.morph; b.morphVal.textContent=d.morph;
+    c.alpha.value=d.alpha; b.alphaVal.textContent=(d.alpha/100).toFixed(2);
+    c.maxDisappear.value=d.maxDisappear; b.maxDisappearVal.textContent=d.maxDisappear;
+    c.maxDist.value=d.maxDist; b.maxDistVal.textContent=d.maxDist;
+    c.linkDist.value=d.linkDist; b.linkDistVal.textContent=d.linkDist;
+    c.trailLen.value=d.trailLen; b.trailVal.textContent=d.trailLen;
+    hexBox.value='#00C2FF'; colBox.value='#00C2FF';
+    hexLine.value='#9CA3AF'; colLine.value='#9CA3AF';
+    hexText.value='#EEEEEE'; colText.value='#EEEEEE';
+    c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
+    start();
+  };
+  video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
+  video.onplay = ()=> setStatus('Playing…');
+  video.onerror = ()=> setStatus('Video cannot play (codec?)');
+
+  /* -------- Save to MP4 (WebCodecs + Muxer; Safari MR fallback) -------- */
+  $('#btnSave').onclick = saveMP4;
+
+  async function saveMP4(){
+    if(!video.src || stream){ setStatus('Load a file video (.mp4/.mov) first — export from live camera is not supported'); return; }
+    const hasWC=('VideoEncoder' in window)&&('VideoFrame' in window);
+    if(!hasWC){ setStatus('This browser has no WebCodecs — try Safari (MediaRecorder) or Chrome/Edge.'); return; }
+
+    const restoreLoop=video.loop, restoreTime=video.currentTime;
+    const wasPaused=paused; paused=false;
+    video.loop=false; video.currentTime=0;
+    await video.play();
+
+    const fps = await estimateFPS(video) || 30;
+    // ensure even dimensions for H.264
+    const W=(canvas.width & ~1), H=(canvas.height & ~1);
+    const encCanvas=document.createElement('canvas'), ectx=encCanvas.getContext('2d');
+    encCanvas.width=W; encCanvas.height=H;
+
+    try{
+      const bitrate = Math.round(W*H*fps*0.12);
+      const cfg={codec:'avc1.42E01E', width:W, height:H, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate};
+      const sup=await VideoEncoder.isConfigSupported(cfg);
+      const target=new ArrayBufferTarget();
+      const muxer=new Muxer({target, fastStart:true, video:{width:W,height:H,codec:'avc1.42E01E',timescale:fps}});
+      const encoder=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta), error:e=>console.error(e)});
+      encoder.configure(sup.config);
+
+      await runExportFrames((frameIdx)=>{
+        ectx.drawImage(canvas,0,0,W,H);
+        const vf=new VideoFrame(encCanvas,{timestamp:Math.round(frameIdx*1e6/fps)});
+        encoder.encode(vf); vf.close();
+      });
+
+      await encoder.flush(); muxer.finalize();
+      const blob=new Blob([target.buffer],{type:'video/mp4'});
+      await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
+      setStatus('Exported .mp4');
+    }catch(err){
+      console.error(err);
+      if('MediaRecorder' in window && MediaRecorder.isTypeSupported('video/mp4')){
+        const stream = encCanvas.captureStream(fps);
+        const mr = new MediaRecorder(stream, {mimeType:'video/mp4'});
+        const chunks=[]; mr.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+        mr.onstop=async()=>{ const blob=new Blob(chunks,{type:'video/mp4'}); await saveBlobInteractive(blob,`blob-tracking-${W}x${H}@${fps}.mp4`); setStatus('Exported .mp4 (MediaRecorder)'); };
+        mr.start();
+        await runExportFrames(()=>{ ectx.drawImage(canvas,0,0,W,H); });
+        mr.stop();
+      }else{
+        setStatus('Failed to export MP4. Try another browser (Chrome/Edge/Safari).');
+      }
+    }finally{
+      video.loop=restoreLoop;
+      if(wasPaused){ paused=true; video.pause(); } else { video.play(); }
+      video.currentTime=restoreTime;
+    }
+  }
+
+  function runExportFrames(onEncode){
+    return new Promise(resolve=>{
+      setStatus('Saving MP4…');
+      const step=(_,meta)=>{
+        if(video.ended){ resolve(); return; }
+        grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY); cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+        detectOnCurrentFrame(true);
+        onEncode(meta.presentedFrames||0);
+        video.requestVideoFrameCallback(step);
+      };
+      video.requestVideoFrameCallback(step);
+    });
+  }
+
+  async function estimateFPS(v){
+    return new Promise(res=>{
+      if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(null);
+      let f=0, t0=null;
+      const cb=(_,meta)=>{ f++; if(t0==null) t0=meta.mediaTime; if(meta.mediaTime-t0>=1){ res(f); } else v.requestVideoFrameCallback(cb); };
+      v.requestVideoFrameCallback(cb);
+    });
+  }
+
+  // Save to any folder (Chromium); fallback to download
+  async function saveBlobInteractive(blob, suggestedName){
+    if('showSaveFilePicker' in window){
+      const handle = await showSaveFilePicker({
+        suggestedName,
+        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+      });
+      const w = await handle.createWritable(); await w.write(blob); await w.close();
+    }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=suggestedName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),2000);
+    }
+  }
+})();
+</script>
+</body>
+</html>
