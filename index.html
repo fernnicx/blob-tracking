@@ -367,8 +367,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       const target = new ArrayBufferTarget();
       const muxer  = new Muxer({
         target,
-        fastStart: true,
-        video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
+        fastStart: 'in-memory',
+        video: { codec:'avc', width: W, height: H, timescale: fps, frameRate: fps }
       });
 
       const encoder = new VideoEncoder({
