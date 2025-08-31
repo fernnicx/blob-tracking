@@ -6,22 +6,19 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-    /* ChatGPT-ish dark palette */
-    --bg:#0F1115;        /* app background */
-    --panel:#13161A;     /* panels/cards */
-    --canvas:#0E1116;    /* video/canvas surface */
-    --fg:#ECEDEE;        /* primary text */
-    --muted:#A1A7B3;     /* secondary text */
-    --line:#2A2F3A;      /* borders */
-    --accent:#c084fc;    /* slider/button accent */
-    --chip:#171A20;      /* subtle chips/pills */
+    /* ChatGPT-ish dark theme */
+    --bg:#0F1115;
+    --panel:#13161A;
+    --canvas:#0E1116;
+    --fg:#ECEDEE;
+    --muted:#A1A7B3;
+    --line:#2A2F3A;
+    --accent:#C084FC;
+    --chip:#171A20;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{
-    margin:0;background:var(--bg);color:var(--fg);
-    font:16px/1.5 Helvetica, Arial, sans-serif;
-  }
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Helvetica, Arial, sans-serif}
   header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
   h1{margin:0;font-size:18px}
 
@@ -29,30 +26,24 @@
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
 
-  /* centered status line (under video, above controls) */
+  /* centered status */
   #statusWrap{display:flex;justify-content:center;margin:12px 0 18px}
   #status{padding:8px 12px;border-radius:10px;font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:240px;text-align:center}
 
   .controls{padding:10px 16px;display:grid;gap:16px}
   .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:18px}
   .panel .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px 24px}
-
   .ctl{display:flex;flex-direction:column;gap:8px}
   .ctl label{color:var(--muted);font-size:13px}
-
   .row-inline{display:flex;align-items:center;gap:10px}
-  /* Make Box/Line/Text titles match other labels */
-  .row-inline .ttl{color:var(--muted);font-size:13px;min-width:40px}
-
+  .row-inline span{color:var(--muted);font-size:13px;min-width:40px}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
   input[type="range"]{width:100%;accent-color:var(--accent)}
   input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip);cursor:pointer}
   input[type="text"].hex{flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg)}
   .checkline{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
-  /* Unify “Show …” labels as well */
-  .checkline label{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
-
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
+  .checkline label{display:flex;align-items:center;gap:8px}
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .push{flex:1}
   button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
@@ -94,17 +85,17 @@
         <div class="ctl">
           <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
           <input type="range" id="boxThick" min="1" max="8" value="2">
-          <div class="row-inline"><label class="ttl">Box</label><input type="color" id="colBox"><input id="hexBox" class="hex" value="#FF0000"></div>
+          <div class="row-inline"><span>Box</span><input type="color" id="colBox"><input id="hexBox" class="hex" value="#FF0000"></div>
         </div>
         <div class="ctl">
           <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
           <input type="range" id="lineWidth" min="1" max="8" value="2">
-          <div class="row-inline"><label class="ttl">Line</label><input type="color" id="colLine"><input id="hexLine" class="hex" value="#FF0000"></div>
+          <div class="row-inline"><span>Line</span><input type="color" id="colLine"><input id="hexLine" class="hex" value="#FF0000"></div>
         </div>
         <div class="ctl">
           <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
           <input type="range" id="textSize" min="8" max="48" value="14">
-          <div class="row-inline"><label class="ttl">Text</label><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
+          <div class="row-inline"><span>Text</span><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
         </div>
       </div>
     </section>
@@ -116,12 +107,13 @@
         <label><input type="checkbox" id="showCoord" checked> Show Coords</label>
         <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
         <label><input type="checkbox" id="showLinks" checked> Show Links</label>
+        <label><input type="checkbox" id="showPoints"> Show Points</label>
       </div>
     </section>
   </div>
 </div>
 
-<!-- Sticky bottom bar -->
+<!-- Bottom bar -->
 <div class="bar">
   <div class="wrap">
     <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
@@ -154,13 +146,14 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
   const video=$('#video'); video.muted=true; video.playsInline=true;
 
-  /* —— controls —— */
+  /* Controls */
   const c={
     scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
     showBoxes:$('#showBoxes'),showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),
     boxThick:$('#boxThick'), lineWidth:$('#lineWidth'), textSize:$('#textSize'),
+    showPoints:$('#showPoints')
   };
   const b={
     scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
@@ -181,7 +174,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // color pickers
+  // Colors (defaults)
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -192,21 +185,21 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const colLine=$('#colLine'), hexLine=$('#hexLine'); bindColor(colLine,hexLine,'#FF0000');
   const colText=$('#colText'), hexText=$('#hexText'); bindColor(colText,hexText,'#EEEEEE');
 
-  /* ---------- simple centroid tracker ---------- */
+  /* Tracker */
   class CentroidTracker{
     constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
     register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
     deregister(id){this.objects.delete(id);this.disappeared.delete(id);}
     update(cs){
-      if(cs.length===0){for(const id of this.disappeared.keys()){this.disappeared.set(id,this.disappeared.get(id)+1);if(this.disappeared.get(id)>this.maxDisappeared)this.deregister(id);}return this.objects;}
-      if(this.objects.size===0){cs.forEach(c=>this.register(c));return this.objects;}
+      if(cs.length===0){ for(const id of this.disappeared.keys()){ this.disappeared.set(id,this.disappeared.get(id)+1); if(this.disappeared.get(id)>this.maxDisappeared) this.deregister(id);} return this.objects; }
+      if(this.objects.size===0){ cs.forEach(c=>this.register(c)); return this.objects; }
       const ids=[...this.objects.keys()], base=[...this.objects.values()];
       const D=base.map(b=>cs.map(c=>Math.hypot(b[0]-c[0],b[1]-c[1]))), usedR=new Set(), usedC=new Set();
       const rows=[...D.keys()].sort((a,b)=>Math.min(...D[a])-Math.min(...D[b])), argmin=r=>D[r].indexOf(Math.min(...D[r]));
-      for(const r of rows){const ci=argmin(r); if(usedR.has(r)||usedC.has(ci)) continue; if(D[r][ci]>this.maxDistance) continue;
-        const id=ids[r]; this.objects.set(id,cs[ci]); this.disappeared.set(id,0); usedR.add(r); usedC.add(ci);}
+      for(const r of rows){ const ci=argmin(r); if(usedR.has(r)||usedC.has(ci)) continue; if(D[r][ci]>this.maxDistance) continue;
+        const id=ids[r]; this.objects.set(id,cs[ci]); this.disappeared.set(id,0); usedR.add(r); usedC.add(ci); }
       for(let ci=0;ci<cs.length;ci++) if(!usedC.has(ci)) this.register(cs[ci]);
-      for(let r=0;r<base.length;r++) if(!usedR.has(r)){const id=ids[r]; this.disappeared.set(id,this.disappeared.get(id)+1); if(this.disappeared.get(id)>this.maxDisappeared)this.deregister(id);}
+      for(let r=0;r<base.length;r++) if(!usedR.has(r)){ const id=ids[r]; this.disappeared.set(id,this.disappeared.get(id)+1); if(this.disappeared.get(id)>this.maxDisappeared) this.deregister(id); }
       return this.objects;
     }
   }
@@ -216,13 +209,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   const trails=new Map();
 
-  /* ---------- OpenCV objects & loop ---------- */
+  /* OpenCV & loop */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
-
-  /* mirror flag: true when using live camera (preview is flipped).
-     IMPORTANT: processing always uses the UNFLIPPED frame. */
-  let mirror=false;
+  let mirrorPreview=false; // mirror when camera is on (preview & overlays), not for file videos
 
   // color conversion const
   let COLOR_RGBA2GRAY = null;
@@ -252,9 +242,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
 
-  /* Grab into src WITHOUT mirroring (processing stays normal) */
   function grabToSrc(){
     if(!src) return false;
+    // always process the raw (non-mirrored) frame
     bctx.drawImage(video,0,0,procW,procH);
     const im=bctx.getImageData(0,0,procW,procH);
     src.data.set(im.data);
@@ -266,53 +256,73 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // draw background (mirrored if camera)
-    ctx.save();
-    if(mirror){ ctx.translate(canvas.width,0); ctx.scale(-1,1); }
+    if (mirrorPreview){
+      // Draw mirrored preview and overlays
+      ctx.save();
+      ctx.translate(canvas.width,0);
+      ctx.scale(-1,1);
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+
+      if(c.showBoxes.checked){
+        ctx.lineWidth=+c.boxThick.value;
+        ctx.strokeStyle=hexBox.value;
+        boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
+      }
+      if(c.showLinks.checked){
+        const pts=[...objs.values()].map(([x,y])=>({x,y}));
+        const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
+        for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+          const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
+          if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
+        }
+      }
+      if(c.showTrail.checked && maxTrail>0){
+        ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
+        for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
+      }
+
+      // Text: draw unmirrored so it reads correctly
+      ctx.restore(); // back to normal space for text
+      ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
+      for(const [id,[cx,cy]] of objs.entries()){
+        const dx = canvas.width - cx;           // mirrored x
+        if (c.showPoints.checked){
+          ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill();
+        }
+        const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
+        ctx.fillStyle=hexText.value; ctx.fillText(txt,dx+8,cy-8);
+      }
+      return;
+    }
+
+    // Normal (not mirrored)
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    ctx.restore();
 
-    // helper to flip X so overlays match mirrored preview
-    const X = x => mirror ? (canvas.width - x) : x;
-
-    // boxes
     if(c.showBoxes.checked){
       ctx.lineWidth=+c.boxThick.value;
       ctx.strokeStyle=hexBox.value;
-      boxes.forEach(r=>{
-        const dx = mirror ? (canvas.width - (r.x + r.w)) : r.x;
-        ctx.strokeRect(dx, r.y, r.w, r.h);
-      });
+      boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
     }
-
-    // links
     if(c.showLinks.checked){
-      const pts=[...objs.values()].map(([x,y])=>({x:X(x),y}));
+      const pts=[...objs.values()].map(([x,y])=>({x,y}));
       const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
       for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
         const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
         if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
       }
     }
-
-    // trails
     if(c.showTrail.checked && maxTrail>0){
       ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
-      for(const arr of trails.values()){
-        if(arr.length<2) continue;
-        ctx.beginPath(); ctx.moveTo(X(arr[0].x),arr[0].y);
-        for(let k=1;k<arr.length;k++) ctx.lineTo(X(arr[k].x),arr[k].y);
-        ctx.stroke();
-      }
+      for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
 
-    // ids / coords
     ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
     for(const [id,[cx,cy]] of objs.entries()){
-      const dx = X(cx);
-      ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill();
+      if (c.showPoints.checked){
+        ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+      }
       const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
-      ctx.fillStyle=hexText.value; ctx.fillText(txt,dx+8,cy-8);
+      ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
     }
   }
 
@@ -350,7 +360,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       drawOverlayFromDetections(boxes, objs, 0);
     }
 
-    // update background at the end (paused keeps bg frozen)
     if(!paused){
       const a = Math.min(1,Math.max(0,+c.alpha.value/100));
       cv.addWeighted(bg,(1-a),blur,a,0,bg);
@@ -401,22 +410,25 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
   }
 
-  /* ------ sources & UI ------ */
+  /* Sources & UI */
   $('#fileInput').onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
-    mirror = false;                        // files are not mirrored
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+    mirrorPreview=false;
     video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
     try{ URL.revokeObjectURL(video.src); }catch{}
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
   };
+
   $('#btnCam').onclick=async()=>{
     try{
       if(stream){ stream.getTracks().forEach(t=>t.stop()); }
-      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:'user'},audio:false});
-      stream=s; mirror = true;             // PREVIEW mirrored; processing stays normal
-      video.loop=false; video.onended=null; video.srcObject=s; await video.play(); setStatus('Camera started (mirrored preview)');
+      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
+      stream=s; video.loop=false; video.onended=null; video.srcObject=s; mirrorPreview=true;
+      await video.play(); setStatus('Camera started (mirrored)');
     }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
   };
+
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
   $('#btnPause').onclick=()=>{
     if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; }
@@ -424,21 +436,26 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); $('#btnPause').textContent='Resume'; reprocessPaused(); }
     else{ video.play(); setStatus('Playing…'); $('#btnPause').textContent='Pause'; if(animId===null) loop(); }
   };
+
   $('#btnReset').onclick=()=>{
     const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14};
-    for(const [k,v] of Object.entries(d)){ c[k].value=v; (k==='alpha'?b.alphaVal:b[(k==='trailLen')?'trailVal':(k==='boxThick')?'boxThickVal':(k==='lineWidth')?'lineWidthVal':(k==='textSize')?'textSizeVal':k+'Val']).textContent=(k==='alpha')?(v/100).toFixed(2):v; }
+    for(const [k,v] of Object.entries(d)){
+      c[k].value=v;
+      (k==='alpha'?b.alphaVal:b[(k==='trailLen')?'trailVal':(k==='boxThick')?'boxThickVal':(k==='lineWidth')?'lineWidthVal':(k==='textSize')?'textSizeVal':k+'Val']).textContent=(k==='alpha')?(v/100).toFixed(2):v;
+    }
     hexBox.value='#FF0000'; colBox.value='#FF0000';
     hexLine.value='#FF0000'; colLine.value='#FF0000';
     hexText.value='#EEEEEE'; colText.value='#EEEEEE';
     c.showBoxes.checked=c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
+    c.showPoints.checked=false;
     start();
   };
+
   video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
-  video.onplay = ()=> setStatus('Playing…');
+  video.onplay = ()=> setStatus(mirrorPreview ? 'Playing (mirrored)…' : 'Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
   /* -------- Save to MP4 (WebCodecs + mp4-muxer) -------- */
-
   async function getSaveWriter(suggestedName){
     if (!('showSaveFilePicker' in window)) return null; // iOS/Safari fallback
     try{
@@ -454,10 +471,13 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   }
 
   $('#btnSave').addEventListener('click', async () => {
-    if (!video.src || stream) { setStatus('Load a video file first — export from live camera is not supported'); return; }
+    if (!video.src && !stream) { setStatus('Load a video file first'); return; }
+    if (stream) { setStatus('Export from live camera is not supported'); return; }
+
     const fps = await estimateFPS(video) || 30;
     const W0=(canvas.width&~1), H0=(canvas.height&~1);
     const suggested = `blob-tracking-${W0}x${H0}@${fps}.mp4`;
+
     const writer = await getSaveWriter(suggested);
     await saveViaWebCodecs(writer, suggested, fps);
   });
@@ -523,17 +543,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       muxer.finalize();
 
       const blob=new Blob([target.buffer],{type:'video/mp4'});
-
-      if(writer){
-        await writer.write(blob);
-        await writer.close();
-      }else{
-        // iOS / Safari fallback
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a'); a.href=url; a.download=suggestedName;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(()=>URL.revokeObjectURL(url), 1500);
-      }
+      if(writer){ await writer.write(blob); await writer.close(); }
+      else{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=suggestedName; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
       setStatus('Exported .mp4');
     }catch(err){
       console.error(err);
