@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="utf-8" />
 <title>Blob Tracking</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
     --bg:#121016; --panel:#171320; --canvas:#15121c;
@@ -14,35 +14,33 @@
   html,body{height:100%}
   body{
     margin:0;background:var(--bg);color:var(--fg);
-    font:16px/1.5 Helvetica, Arial, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
+    font:16px/1.5 Helvetica, Arial, sans-serif;
   }
   header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
   h1{margin:0;font-size:18px}
+
   #stageWrap{padding:12px 16px 96px}
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
 
-  /* centered status under the video */
-  .status{
-    display:block; max-width:min(1400px,98vw); margin:10px auto 16px;
-    padding:10px 14px; text-align:center;
-    border-radius:12px; font-size:14px; letter-spacing:.2px;
-    background:var(--chip); color:var(--muted); border:1px solid var(--line);
-  }
+  /* centered status line (under video, above controls) */
+  #statusWrap{display:flex;justify-content:center;margin:12px 0 18px}
+  #status{padding:8px 12px;border-radius:10px;font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:240px;text-align:center}
 
-  /* sections */
-  .controls{padding:10px 16px; max-width:min(1400px,98vw); margin:0 auto;}
-  .section{border:1px solid var(--line); border-radius:12px; padding:12px 14px; background:rgba(26,21,38,.4); margin-bottom:12px;}
-  .section h2{margin:0 0 8px; font-size:14px; color:var(--muted); font-weight:600; letter-spacing:.2px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:center}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  label{font-size:13px;color:var(--muted)}
-  input[type="range"]{width:180px;accent-color:var(--accent)}
-  input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip)}
-  input[type="text"].hex{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace}
+  .controls{padding:10px 16px;display:grid;gap:16px}
+  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:18px}
+  /* each panel uses responsive grid, but each control is vertical (label on top, slider full width under it) */
+  .panel .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px 24px}
+  .ctl{display:flex;flex-direction:column;gap:8px}
+  .ctl label{color:var(--muted);font-size:13px}
+  .row-inline{display:flex;align-items:center;gap:10px}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
-
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,.0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
+  input[type="range"]{width:100%;accent-color:var(--accent)}
+  input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip);cursor:pointer}
+  input[type="text"].hex{flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg)}
+  .checkline{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+  .checkline label{display:flex;align-items:center;gap:8px}
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .push{flex:1}
   button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
@@ -58,72 +56,56 @@
   <video id="video" playsinline muted></video>
   <canvas id="buf"></canvas>
 
-  <!-- centered status under video -->
-  <div id="status" class="status">Loading OpenCV.js…</div>
+  <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
 
+  <!-- Control panels -->
   <div class="controls">
-    <!-- SECTION 1: Processing (everything except styling sliders) -->
-    <div class="section">
-      <h2>Processing</h2>
+
+    <!-- Processing (no title) -->
+    <section class="panel">
       <div class="grid">
-        <div class="row"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
-        <div class="row"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
-        <div class="row"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
-        <div class="row"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
-        <div class="row"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
-        <div class="row"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
-        <div class="row"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
-        <div class="row"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
-        <div class="row"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
+        <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
+        <div class="ctl"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
+        <div class="ctl"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
+        <div class="ctl"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
+        <div class="ctl"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
+        <div class="ctl"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
+        <div class="ctl"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
+        <div class="ctl"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
+        <div class="ctl"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
       </div>
-    </div>
+    </section>
 
-    <!-- SECTION 2: Styling (thickness/width/size + colors) -->
-    <div class="section">
-      <h2>Styling</h2>
+    <!-- Styling (no title) -->
+    <section class="panel">
       <div class="grid">
-        <div class="row">
-          <label>Box Thickness <span id="boxWVal" class="badge">2</span></label>
-          <input type="range" id="boxW" min="1" max="8" value="2">
-          <span class="row" style="margin-left:12px">
-            <label>Box</label>
-            <input type="color" id="colBox">
-            <input class="hex" id="hexBox" value="#FF0000">
-          </span>
+        <div class="ctl">
+          <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
+          <input type="range" id="boxThick" min="1" max="8" value="2">
+          <div class="row-inline"><span>Box</span><input type="color" id="colBox"><input id="hexBox" class="hex" value="#FF0000"></div>
         </div>
-
-        <div class="row">
-          <label>Line Width <span id="lineWVal" class="badge">2</span></label>
-          <input type="range" id="lineW" min="1" max="6" value="2">
-          <span class="row" style="margin-left:12px">
-            <label>Line</label>
-            <input type="color" id="colLine">
-            <input class="hex" id="hexLine" value="#FF0000">
-          </span>
+        <div class="ctl">
+          <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
+          <input type="range" id="lineWidth" min="1" max="8" value="2">
+          <div class="row-inline"><span>Line</span><input type="color" id="colLine"><input id="hexLine" class="hex" value="#FF0000"></div>
         </div>
-
-        <div class="row">
+        <div class="ctl">
           <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
-          <input type="range" id="textSize" min="10" max="28" value="14">
-          <span class="row" style="margin-left:12px">
-            <label>Text</label>
-            <input type="color" id="colText">
-            <input class="hex" id="hexText" value="#EEEEEE">
-          </span>
+          <input type="range" id="textSize" min="8" max="48" value="14">
+          <div class="row-inline"><span>Text</span><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- SECTION 3: Toggles -->
-    <div class="section">
-      <h2>Display</h2>
-      <div class="row" style="gap:18px">
-        <label>Show Boxes <input type="checkbox" id="showBox" checked></label>
-        <label>Show Coords <input type="checkbox" id="showCoord" checked></label>
-        <label>Show Trails <input type="checkbox" id="showTrail" checked></label>
-        <label>Show Links <input type="checkbox" id="showLinks" checked></label>
+    <!-- Display (no title) -->
+    <section class="panel">
+      <div class="checkline">
+        <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
+        <label><input type="checkbox" id="showCoord" checked> Show Coords</label>
+        <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
+        <label><input type="checkbox" id="showLinks" checked> Show Links</label>
       </div>
-    </div>
+    </section>
   </div>
 </div>
 
@@ -134,9 +116,9 @@
     <button id="btnCam" class="primary">Camera</button>
     <button id="btnRestart">Restart Video</button>
     <button id="btnPause">Pause</button>
-    <button id="btnReset" class="ghost">Reset to Default</button>
+    <button id="btnReset" class="ghost">Reset Settings</button>
     <span class="push"></span>
-    <button id="btnSave" class="primary">Save (video)</button>
+    <button id="btnSave" class="primary">Save (.mp4)</button>
   </div>
 </div>
 
@@ -160,24 +142,26 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
   const video=$('#video'); video.muted=true; video.playsInline=true;
 
+  /* —— controls —— */
   const c={
-    boxW:$('#boxW'), lineW:$('#lineW'), textSize:$('#textSize'),
     scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
-    showBox:$('#showBox'), showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks')
+    showBoxes:$('#showBoxes'),showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),
+    boxThick:$('#boxThick'), lineWidth:$('#lineWidth'), textSize:$('#textSize'),
   };
   const b={
-    boxWVal:$('#boxWVal'), lineWVal:$('#lineWVal'), textSizeVal:$('#textSizeVal'),
     scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
     morphVal:$('#morphVal'),alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),
-    maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal')
+    maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal'),
+    boxThickVal:$('#boxThickVal'), lineWidthVal:$('#lineWidthVal'), textSizeVal:$('#textSizeVal'),
   };
 
   // badges + handlers
   Object.entries(c).forEach(([k,el])=>{
     if(el?.type==='range'){
-      const id=(k==='trailLen')?'trailVal':(k+'Val'); const badge=b[id];
+      const map={trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal'};
+      const id=map[k] || (k+'Val'); const badge=b[id];
       const upd=()=>badge.textContent=(k==='alpha')?(+el.value/100).toFixed(2):el.value;
       el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd();
     }else if(el?.type==='checkbox'){
@@ -193,12 +177,11 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     colorEl.addEventListener('input', ()=>{ hexEl.value=colorEl.value.toUpperCase(); if(paused) reprocessPaused(); });
     hexEl.addEventListener('change', ()=>{ hexEl.value=norm(hexEl.value); colorEl.value=hexEl.value; if(paused) reprocessPaused(); });
   }
-  const colBox=$('#colBox'), hexBox=$('#hexBox');
-  const colLine=$('#colLine'), hexLine=$('#hexLine');
-  const colText=$('#colText'), hexText=$('#hexText');
-  bindColor(colBox,hexBox,'#FF0000'); bindColor(colLine,hexLine,'#FF0000'); bindColor(colText,hexText,'#EEEEEE');
+  const colBox=$('#colBox'), hexBox=$('#hexBox'); bindColor(colBox,hexBox,'#FF0000');
+  const colLine=$('#colLine'), hexLine=$('#hexLine'); bindColor(colLine,hexLine,'#FF0000');
+  const colText=$('#colText'), hexText=$('#hexText'); bindColor(colText,hexText,'#EEEEEE');
 
-  /* ---------- simple tracker ---------- */
+  /* ---------- simple centroid tracker ---------- */
   class CentroidTracker{
     constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
     register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
@@ -226,7 +209,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
 
-  // color conversion constant
+  // color conversion constant (guard against undefined)
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
     COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY === 'number') ? cv.COLOR_RGBA2GRAY : cv.COLOR_RGB2GRAY;
@@ -268,33 +251,35 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
-    const boxThickness = +c.boxW.value;
-    const lineWidth = +c.lineW.value;
-    const txtSize = +c.textSize.value;
-
-    if (c.showBox.checked){
-      ctx.lineWidth=boxThickness; ctx.strokeStyle=hexBox.value;
+    // boxes
+    if(c.showBoxes.checked){
+      ctx.lineWidth=+c.boxThick.value;
+      ctx.strokeStyle=hexBox.value;
       boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
     }
 
+    // links
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
-      const L=+c.linkDist.value; ctx.lineWidth=lineWidth; ctx.strokeStyle=hexLine.value;
+      const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
       for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
         const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
         if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
       }
     }
+
+    // trails
     if(c.showTrail.checked && maxTrail>0){
-      ctx.lineWidth=Math.max(1,lineWidth-1); ctx.strokeStyle=hexLine.value+'90';
+      ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
       for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
-    ctx.font=`${txtSize}px Helvetica, Arial, ui-sans-serif, system-ui`;
+
+    // ids / coords
+    ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
     for(const [id,[cx,cy]] of objs.entries()){
-      ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,Math.max(2, lineWidth+1),0,Math.PI*2); ctx.fill();
-      if (c.showCoord.checked){
-        ctx.fillStyle=hexText.value; ctx.fillText(`${cx.toFixed(2)}, ${cy.toFixed(2)}`,cx+8,cy-8);
-      }
+      ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+      const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
+      ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
     }
   }
 
@@ -332,6 +317,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       drawOverlayFromDetections(boxes, objs, 0);
     }
 
+    // update background at the end (paused keeps bg frozen)
     if(!paused){
       const a = Math.min(1,Math.max(0,+c.alpha.value/100));
       cv.addWeighted(bg,(1-a),blur,a,0,bg);
@@ -404,182 +390,152 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     else{ video.play(); setStatus('Playing…'); $('#btnPause').textContent='Pause'; if(animId===null) loop(); }
   };
   $('#btnReset').onclick=()=>{
-    const d={boxW:2,lineW:2,textSize:14,scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20};
-    Object.entries(d).forEach(([k,v])=>{ c[k].value=v; const id=(k==='trailLen')?'trailVal':(k+'Val'); if(b[id]) b[id].textContent=(k==='alpha')?(v/100).toFixed(2):v; });
+    const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14};
+    for(const [k,v] of Object.entries(d)){ c[k].value=v; (k==='alpha'?b.alphaVal:b[(k==='trailLen')?'trailVal':(k==='boxThick')?'boxThickVal':(k==='lineWidth')?'lineWidthVal':(k==='textSize')?'textSizeVal':k+'Val']).textContent=(k==='alpha')?(v/100).toFixed(2):v; }
     hexBox.value='#FF0000'; colBox.value='#FF0000';
     hexLine.value='#FF0000'; colLine.value='#FF0000';
     hexText.value='#EEEEEE'; colText.value='#EEEEEE';
-    c.showBox.checked=c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
+    c.showBoxes.checked=c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
     start();
   };
   video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
   video.onplay = ()=> setStatus('Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* -------- Save (gesture-safe picker + WC/MR paths) -------- */
-  $('#btnSave').onclick = async () => {
-    const mode = pickSaveMode();                     // decide before picker
-    const dest = await prepareSaveDestination(`blob-tracking.${mode.ext}`, mode.ext);
-    try { await saveVideo(mode, dest); }
-    catch(e){ console.error(e); setStatus('Save failed: ' + (e.message||e)); }
-  };
+  /* -------- Save to MP4 (WebCodecs + mp4-muxer) -------- */
 
-  function supportsWebCodecs(){ return ('VideoEncoder' in window) && ('VideoFrame' in window); }
-  function supportsMediaRecorder(){ try{ return 'MediaRecorder' in window; }catch{ return false; } }
-
-  function pickRecorderMime(){
-    if (MediaRecorder.isTypeSupported('video/mp4;codecs=h264')) return {mime:'video/mp4;codecs=h264', ext:'mp4'};
-    if (MediaRecorder.isTypeSupported('video/mp4')) return {mime:'video/mp4', ext:'mp4'};
-    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) return {mime:'video/webm;codecs=vp9', ext:'webm'};
-    return {mime:'video/webm', ext:'webm'};
-  }
-
-  function pickSaveMode(){
-    if (supportsWebCodecs()) return {kind:'wc', mime:'video/mp4', ext:'mp4'};
-    if (supportsMediaRecorder()) return {kind:'mr', ...pickRecorderMime()};
-    return {kind:'none', mime:'', ext:'mp4'};
-  }
-
-  // Must be called while still in user gesture
-  async function prepareSaveDestination(defaultName, ext){
-    if('showSaveFilePicker' in window){
-      try{
-        const accept = ext==='webm' ? {'video/webm':['.webm']} : {'video/mp4':['.mp4']};
-        const handle = await showSaveFilePicker({
-          suggestedName: defaultName,
-          types:[{description: ext.toUpperCase()+' Video', accept}],
-        });
-        return {kind:'fs', handle, ext};
-      }catch{ /* user cancelled */ }
+  // Open the file picker immediately (user gesture) and hand back a writer (or null on iOS/etc.)
+  async function getSaveWriter(suggestedName){
+    if (!('showSaveFilePicker' in window)) return null; // iOS/Safari fallback
+    try{
+      const handle = await showSaveFilePicker({
+        suggestedName,
+        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+      });
+      return await handle.createWritable();
+    }catch(err){
+      console.warn('Save picker canceled or blocked:', err);
+      return null;
     }
-    return {kind:'download', ext};
   }
 
-  async function saveBlobInteractive(blob, suggestedName, dest){
-    if(dest?.kind==='fs'){
-      const w=await dest.handle.createWritable(); await w.write(blob); await w.close();
+  $('#btnSave').addEventListener('click', async () => {
+    // guard: not from camera
+    if (!video.src || stream) {
+      setStatus('Load a video file first — export from live camera is not supported');
       return;
     }
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download=suggestedName;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1500);
-  }
+    // estimate FPS early (still in same turn is ok if we picker before awaits)
+    const fps = await estimateFPS(video) || 30;
+    const W0=(canvas.width&~1), H0=(canvas.height&~1);
+    const suggested = `blob-tracking-${W0}x${H0}@${fps}.mp4`;
 
-  async function saveVideo(mode, dest){
-    if (mode.kind==='wc') return saveViaWebCodecs(dest);
-    if (mode.kind==='mr') return saveViaMediaRecorder(dest);
-    setStatus('No supported export path in this browser.');
-  }
+    // open save writer *before* any long awaits (keeps the user gesture)
+    const writer = await getSaveWriter(suggested);
 
-  /* ---------- WebCodecs + mp4-muxer ---------- */
+    // then run the encoder & muxer and write/ download at the end
+    await saveViaWebCodecs(writer, suggested, fps);
+  });
+
   function chooseProfile(width,height,fps,bitrate){
-    const bases = ['avc1.640028','avc1.4D4020','avc1.42E01E']; // High/Main/Baseline
-    return bases.map(codec => ({codec,width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate}));
-  }
-  function clampToH264Area(W,H){
-    const MAX_AREA_BASELINE = 414720; // H.264 Level 3.0 coded area
-    if (W*H <= MAX_AREA_BASELINE) return {W, H};
-    const s = Math.sqrt(MAX_AREA_BASELINE/(W*H));
-    const w = (Math.floor(W*s) & ~1), h = (Math.floor(H*s) & ~1);
-    return {W:w, H:h};
+    // Prefer High@4.0 for HD, then Main@3.1, then Baseline@3.0 as last resort.
+    return [
+      {codec:'avc1.640028', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // High@4.0
+      {codec:'avc1.4D401F', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Main@3.1
+      {codec:'avc1.42E01E', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Baseline@3.0
+    ];
   }
 
-  async function saveViaWebCodecs(dest){
+  async function saveViaWebCodecs(writer, suggestedName, fps){
     const restoreLoop=video.loop, restoreTime=video.currentTime;
     const wasPaused=paused; paused=false;
     video.loop=false; video.currentTime=0;
     try{ await video.play(); }catch{}
 
-    const fps = await estimateFPS(video) || 30;
-    const W0=(canvas.width&~1), H0=(canvas.height&~1);
-    let {W,H} = clampToH264Area(W0,H0);
-
+    // dimensions (even) – keep original canvas size; some profiles may downlevel, but we don't downscale here
+    const W=(canvas.width&~1), H=(canvas.height&~1);
     const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H;
     const ectx=encCanvas.getContext('2d');
-    const bitrate = Math.round(W*H*fps*0.12);
 
-    let ok=null;
-    for(const cfg of chooseProfile(W,H,fps,bitrate)){
-      const sup = await VideoEncoder.isConfigSupported(cfg).catch(()=>null);
-      if(sup?.supported){ ok=sup.config; break; }
+    try{
+      const bitrate = Math.max(300_000, Math.round(W*H*fps*0.10)); // simple target rate
+      let cfg=null;
+      for(const c of chooseProfile(W,H,fps,bitrate)){
+        const sup = await VideoEncoder.isConfigSupported(c).catch(()=>null);
+        if(sup?.supported){ cfg=sup.config; break; }
+      }
+      if(!cfg){ setStatus('Encoder config not supported for this size; try smaller Processing Scale.'); return; }
+
+      const target=new ArrayBufferTarget();
+      const muxer = new Muxer({
+        target,
+        fastStart: 'in-memory',              // moov before mdat = safest for players
+        firstTimestampBehavior: 'offset',    // fix non-zero DTS from rVFC
+        video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
+      });
+
+      let encoded = 0;
+      const encoder=new VideoEncoder({
+        output:(chunk,meta)=>{ muxer.addVideoChunk(chunk,meta); encoded++; },
+        error:e=>console.error(e)
+      });
+      encoder.configure(cfg);
+
+      const totalFrames = Number.isFinite(video.duration) ? Math.max(1, Math.round(video.duration*fps)) : null;
+
+      await driveFrames((i)=>{
+        ectx.drawImage(canvas,0,0,W,H);
+        const vf=new VideoFrame(encCanvas,{timestamp:Math.round(i*1e6/fps)});
+        encoder.encode(vf);
+        vf.close();
+        if(totalFrames){
+          const pct=Math.min(100, Math.round((i+1)/totalFrames*100));
+          setStatus(`Saving… ${pct}% (${i+1}/${totalFrames})`);
+        }else{
+          setStatus(`Saving… ${i+1} frames`);
+        }
+      });
+
+      await encoder.flush();
+      muxer.finalize();
+
+      const blob=new Blob([target.buffer],{type:'video/mp4'});
+
+      if(writer){
+        await writer.write(blob);
+        await writer.close();
+      }else{
+        // iOS / Safari fallback
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download=suggestedName;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 1500);
+      }
+      setStatus('Exported .mp4');
+    }catch(err){
+      console.error(err);
+      setStatus('Failed to export MP4. Keep the tab focused and try again.');
+    }finally{
+      video.loop=restoreLoop;
+      if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
+      video.currentTime=restoreTime;
     }
-    if(!ok){ setStatus('Encode size unsupported; try smaller scale.'); return; }
-
-    const target=new ArrayBufferTarget();
-    const muxer = new Muxer({
-      target,
-      fastStart: 'in-memory',
-      firstTimestampBehavior: 'offset',
-      video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
-    });
-
-    const encoder=new VideoEncoder({
-      output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),
-      error:e=>console.error(e)
-    });
-    encoder.configure(ok);
-
-    const total = Math.max(1, Math.floor((video.duration||0)*fps) || fps*5);
-    let done = 0;
-
-    await driveFrames((frameIdx)=>{
-      ectx.drawImage(canvas,0,0,W,H);
-      const vf=new VideoFrame(encCanvas,{timestamp:Math.round(frameIdx*1e6/fps)});
-      encoder.encode(vf);
-      vf.close();
-      done = Math.min(total, frameIdx+1);
-      setStatus(`Saving (MP4/H.264)… ${Math.round(done*100/total)}%`);
-    });
-
-    await encoder.flush();
-    muxer.finalize();
-
-    const blob=new Blob([target.buffer],{type:'video/mp4'});
-    await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`, dest);
-    setStatus('Exported MP4');
-
-    video.loop=restoreLoop;
-    if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
-    video.currentTime=restoreTime;
-  }
-
-  /* ---------- MediaRecorder fallback (Safari/iOS etc.) ---------- */
-  async function saveViaMediaRecorder(dest){
-    const fps = await estimateFPS(video) || 30;
-    const rec = pickRecorderMime();                    // decide mime/extension
-    const stream = canvas.captureStream(fps);
-    const mr = new MediaRecorder(stream,{mimeType: rec.mime, videoBitsPerSecond: 6_000_000});
-    const chunks=[];
-    mr.ondataavailable = e=>{ if(e.data?.size) chunks.push(e.data); };
-    const finished = new Promise(res=>{ mr.onstop=res; });
-
-    const total = Math.max(1, Math.floor((video.duration||0)*fps) || fps*5);
-    let done = 0;
-    mr.start();
-
-    await driveFrames(()=>{
-      done++; setStatus(`Saving (${rec.ext.toUpperCase()})… ${Math.round(done*100/total)}%`);
-    });
-
-    mr.stop(); await finished;
-    const blob=new Blob(chunks,{type: rec.mime});
-    await saveBlobInteractive(blob, `blob-tracking.${rec.ext}`, dest);
-    setStatus(`Exported ${rec.ext.toUpperCase()}`);
   }
 
   function driveFrames(onEncode){
     return new Promise(resolve=>{
-      const step=(_,meta)=>{
-        if(video.ended){ resolve(); return; }
-        ensureMats(); if(!grabToSrc()){ resolve(); return; }
-        cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
-        cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+      setStatus('Saving… 0%');
+      let i = 0;
+      const step = (_,meta) => {
+        if (video.ended) { resolve(); return; }
+        ensureMats();
+        if (!grabToSrc()) { resolve(); return; }
+        cv.cvtColor(src, gray, COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0);
         detectOnCurrentFrame(true);
-        onEncode(meta?.presentedFrames ?? 0);
+        onEncode(i++);                  // we keep our own strictly-monotonic index
         video.requestVideoFrameCallback(step);
       };
-      setStatus('Saving… 0%');
       video.requestVideoFrameCallback(step);
     });
   }
