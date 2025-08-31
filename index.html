@@ -1,9 +1,11 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
+<meta charset="utf-8" />
 <title>Blob Tracking</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<!-- tiny inline favicon to avoid 404 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='8' fill='%23c084fc'/%3E%3C/svg%3E" />
 <style>
   /* Warm purple dark theme */
   :root{
@@ -100,8 +102,7 @@ window.Module = {
 
 <!-- App -->
 <script type="module">
-/* Static local import (no CORS/CDN). Put the mp4-muxer build file here:
-   libs/mp4-muxer.esm.js   (copy of build/mp4-muxer.mjs) */
+/* Use a local ES module (no CDN) */
 import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
 (() => {
@@ -127,7 +128,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   });
 
-  // Changing processing scale requires reinit (mats depend on size).
   c.scale.addEventListener('change', ()=> start());
 
   function bindColor(colorEl,hexEl,defHex){
@@ -141,7 +141,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const colText=$('#colText'), hexText=$('#hexText');
   bindColor(colBox,hexBox,'#00C2FF'); bindColor(colLine,hexLine,'#9CA3AF'); bindColor(colText,hexText,'#EEEEEE');
 
-  /* Simple centroid tracker */
   class CentroidTracker{
     constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
     register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
@@ -167,7 +166,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   /* OpenCV objects & loop */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
-  let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
+  let animId=null, paused=false, exporting=false, procW=0, procH=0, scale=0.6, stream=null;
 
   function cleanup(){
     cancelAnimationFrame(animId); animId=null;
@@ -214,13 +213,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   function detectOnCurrentFrame(updateTracker=true){
     const alpha=Math.min(1,Math.max(0,+c.alpha.value/100));
     if(!paused){ cv.addWeighted(bg,(1-alpha),blur,alpha,0,bg); } // freeze bg while paused
-
     cv.absdiff(blur,bg,diff);
     cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
-
     const it=+c.morph.value;
     if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
-
     contours?.delete(); hierarchy?.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
     cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
 
@@ -249,7 +245,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
 
-  // Reprocess CURRENT frame when paused (re-grab + recompute blur)
   function reprocessPaused(){
     if(!paused) return;
     grabToSrc();
@@ -266,7 +261,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       scale=Math.max(0.3, Math.min(1, +c.scale.value/100));
       procW=Math.max(64, Math.round(vw*scale)); procH=Math.max(36, Math.round(vh*scale));
       buf.width=procW; buf.height=procH;
-
       src=new cv.Mat(procH,procW,cv.CV_8UC4);
       gray=new cv.Mat(procH,procW,cv.CV_8UC1);
       blur=new cv.Mat(procH,procW,cv.CV_8UC1);
@@ -286,7 +280,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   function loop(){
     animId=requestAnimationFrame(loop);
     try{
-      if(!paused){
+      if(!paused && !exporting){
         grabToSrc();
         cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
@@ -351,28 +345,25 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     const hasWC = ('VideoEncoder' in window) && ('VideoFrame' in window);
     if (!hasWC) { setStatus('This browser has no WebCodecs — try Safari (MediaRecorder) or Chrome/Edge.'); return; }
 
+    exporting = true;
     const restoreLoop = video.loop, restoreTime = video.currentTime;
     const wasPaused = paused; paused = false;
     video.loop = false; video.currentTime = 0;
     try { await video.play(); } catch {}
 
     const fps = await estimateFPS(video) || 30;
-
-    // H.264 requires even dimensions
-    const W = (canvas.width  & ~1);
-    const H = (canvas.height & ~1);
+    const W = (canvas.width  & ~1), H = (canvas.height & ~1);
     const encCanvas = document.createElement('canvas');
     const ectx = encCanvas.getContext('2d');
     encCanvas.width = W; encCanvas.height = H;
 
     try {
       const bitrate = Math.round(W * H * fps * 0.12);
-      // WebCodecs encoder (FOURCC is correct here)
       const cfg = { codec:'avc1.42E01E', width:W, height:H, framerate:fps,
                     hardwareAcceleration:'prefer-hardware', bitrate };
       const sup = await VideoEncoder.isConfigSupported(cfg);
 
-      // mp4-muxer wants the GENERIC label 'avc'
+      // local buffer + muxer (note: codec name must be 'avc' here)
       const target = new ArrayBufferTarget();
       const muxer  = new Muxer({
         target,
@@ -403,6 +394,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       console.error(err);
       setStatus('Failed to export MP4. Keep the tab focused and try again (or try Chrome/Edge/Safari).');
     } finally {
+      exporting = false;
       video.loop = restoreLoop;
       if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
       video.currentTime = restoreTime;
@@ -432,7 +424,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     });
   }
 
-  // Save to any folder (Chromium); fallback to download
   async function saveBlobInteractive(blob, suggestedName){
     if('showSaveFilePicker' in window){
       const handle = await showSaveFilePicker({
