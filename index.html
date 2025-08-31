@@ -1,28 +1,37 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8">
 <title>Blob Tracking</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  :root{--bg:#121016;--panel:#171320;--canvas:#15121c;--fg:#efe9ff;--muted:#cfc6e6;--line:#2b2240;--accent:#c084fc;--chip:#1a1526}
-  *{box-sizing:border-box} html,body{height:100%}
+  /* Warm purple dark theme */
+  :root{
+    --bg:#121016; --panel:#171320; --canvas:#15121c;
+    --fg:#efe9ff; --muted:#cfc6e6; --line:#2b2240;
+    --accent:#c084fc; --chip:#1a1526;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
   header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
   h1{margin:0;font-size:18px}
   #stageWrap{padding:12px 16px 84px}
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
+
   .controls{padding:10px 16px}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;align-items:center}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   label{font-size:13px;color:var(--muted)}
   input[type="range"]{width:180px;accent-color:var(--accent)}
   input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip)}
-  input.hex{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace}
+  input[type="text"].hex{width:96px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--chip);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
   .status{margin:8px 0 0;padding:8px 12px;border-radius:10px;font-size:13px;border:1px solid var(--line);background:var(--chip)}
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
+
+  /* Sticky bottom bar with Save on the right */
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(18,16,22,.0),rgba(18,16,22,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .push{flex:1}
   button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
@@ -66,6 +75,7 @@
   </div>
 </div>
 
+<!-- Sticky bottom bar -->
 <div class="bar">
   <div class="wrap">
     <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
@@ -78,16 +88,22 @@
   </div>
 </div>
 
+<!-- status helper BEFORE OpenCV -->
 <script>
-  function setStatus(t){const el=document.getElementById('status');el?el.textContent=t:console.log('[status]',t)}
-  window.__cvReady=false;window.__videoReady=false;
-  window.Module={onRuntimeInitialized(){window.__cvReady=true;setStatus('OpenCV.js ready');if(window.__videoReady&&typeof window.__start==='function')window.__start();}};
+function setStatus(text){ const el=document.getElementById('status'); if(el) el.textContent=text; else console.log('[status]',text); }
+window.__cvReady=false; window.__videoReady=false;
+window.Module = {
+  onRuntimeInitialized(){ window.__cvReady=true; setStatus('OpenCV.js ready'); if(window.__videoReady && typeof window.__start==='function') window.__start(); }
+};
 </script>
 <script src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <!-- App -->
 <script type="module">
-/* Local ESM (no CDN): libs/mp4-muxer.esm.js  */
+/*
+  IMPORTANT: Put the mp4-muxer file at:  libs/mp4-muxer.esm.js
+  For example, from https://unpkg.com/mp4-muxer@5.3.0/dist/mp4-muxer.esm.js
+*/
 import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './libs/mp4-muxer.esm.js';
 
 (() => {
@@ -103,6 +119,8 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
            alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),maxDistVal:$('#maxDistVal'),
            linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal')};
 
+  let exporting=false; // prevent double-processing during export
+
   Object.entries(c).forEach(([k,el])=>{
     if(el?.type==='range'){
       const id=(k==='trailLen')?'trailVal':(k+'Val'); const badge=b[id];
@@ -112,6 +130,8 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
       el.addEventListener('change', ()=>{ if(paused) reprocessPaused(); });
     }
   });
+
+  // Changing processing scale requires reinit (mats depend on size).
   c.scale.addEventListener('change', ()=> start());
 
   function bindColor(colorEl,hexEl,defHex){
@@ -163,11 +183,13 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   function grabToSrc(){
     bctx.drawImage(video,0,0,procW,procH);
     const im=bctx.getImageData(0,0,procW,procH);
+    if(!src) return;
     src.data.set(im.data);
   }
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
     ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
@@ -196,11 +218,14 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
 
   function detectOnCurrentFrame(updateTracker=true){
     const alpha=Math.min(1,Math.max(0,+c.alpha.value/100));
-    if(!paused){ cv.addWeighted(bg,(1-alpha),blur,alpha,0,bg); } // freeze bg while paused
+    if(!paused && !exporting){ cv.addWeighted(bg,(1-alpha),blur,alpha,0,bg); } // freeze bg while paused/exporting
+
     cv.absdiff(blur,bg,diff);
     cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
+
     const it=+c.morph.value;
     if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
+
     contours?.delete(); hierarchy?.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
     cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
 
@@ -229,8 +254,11 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
     }
   }
 
-  function reprocessPaused(){ if(!paused) return;
-    grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+  // Reprocess CURRENT frame when paused (re-grab + recompute blur)
+  function reprocessPaused(){
+    if(!paused) return;
+    grabToSrc();
+    cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
     cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
     detectOnCurrentFrame(false);
   }
@@ -263,8 +291,9 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   function loop(){
     animId=requestAnimationFrame(loop);
     try{
-      if(!paused){
-        grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+      if(!paused && !exporting){
+        grabToSrc();
+        cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
         detectOnCurrentFrame(true);
       }
@@ -316,229 +345,186 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   video.onplay = ()=> setStatus('Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* ------------ Save to MP4 (WebCodecs + mp4-muxer) ------------ */
+  /* ---------- Save (.mp4): Desktop (WebCodecs) + iOS (MediaRecorder) ---------- */
+  const hasWebCodecs = ('VideoEncoder' in window) && ('VideoFrame' in window);
+  const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+  const canMediaRecorderMP4 = ('MediaRecorder' in window);
+
   $('#btnSave').onclick = saveMP4;
 
-  // Ask where to save first, then stream MP4 to disk while encoding.
-// Works in Chromium browsers over HTTPS (GitHub Pages = OK). Falls back to download elsewhere.
-
-async function saveMP4(){
-  // Guard rails
-  if (!video.src || stream) { setStatus('Load a file video first (camera export not supported)'); return; }
-  if (!('VideoEncoder' in window) || !('VideoFrame' in window)) { setStatus('No WebCodecs — try Chrome/Edge/Safari.'); return; }
-
-  // --- Try to open the Save dialog first; fall back if not available or user cancels.
-  let writable = null;
-  let streaming = false;
-  if (window.isSecureContext && 'showSaveFilePicker' in window) {
-    try {
-      const handle = await showSaveFilePicker({
-        suggestedName: 'blob-tracking.mp4',
-        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
-      });
-      writable = await handle.createWritable();            // dialog shows here
-      streaming = true;
-      setStatus('Saving… (streaming to file)');
-    } catch (e) {
-      // If they canceled, we’ll fall back to download at the end
-      console.log('File picker not used -> fallback to download', e);
-      setStatus('Saving… (will download when finished)');
-      streaming = false;
+  async function saveMP4(){
+    if (!video.src || stream) { setStatus('Load a file video first (camera export not supported)'); return; }
+    if (hasWebCodecs && !isiOS) {
+      await saveMP4_WebCodecs();
+    } else if (canMediaRecorderMP4) {
+      await saveMP4_SafariMR();
+    } else {
+      setStatus('This browser cannot export MP4. Try Chrome/Edge (desktop) or Safari (iOS).');
     }
-  } else {
-    setStatus('Saving… (file picker unavailable — will download when finished)');
   }
 
-  // Playback prep
-  const restoreLoop = video.loop, restoreTime = video.currentTime;
-  const wasPaused = paused; paused = false;
-  video.loop = false; video.currentTime = 0;
-  try { await video.play(); } catch {}
+  // ---------- WebCodecs + mp4-muxer (desktop Chromium) ----------
+  async function saveMP4_WebCodecs(){
+    let writable = null, streaming = false;
+    if (window.isSecureContext && 'showSaveFilePicker' in window) {
+      try {
+        const handle = await showSaveFilePicker({
+          suggestedName: 'blob-tracking.mp4',
+          types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+        });
+        writable = await handle.createWritable();
+        streaming = true;
+        setStatus('Saving… (streaming to file)');
+      } catch { setStatus('Saving… (will download when finished)'); }
+    } else {
+      setStatus('Saving… (will download when finished)');
+    }
 
-  // FPS + even dimensions + level safe coded area
-  let fps = await estimateFPS(video) || 30;
-  let W = (canvas.width  & ~1), H = (canvas.height & ~1);
-  const MAX_CODED_AREA = 2097152; // 1920*1088 (L4.x)
-  if (W*H > MAX_CODED_AREA) {
-    const s = Math.sqrt(MAX_CODED_AREA / (W*H));
-    W = (Math.max(2, Math.floor(W*s)) & ~1);
-    H = (Math.max(2, Math.floor(H*s)) & ~1);
-  }
+    const restore = await prepPlayback();
+    exporting = true;
 
-  const encCanvas = document.createElement('canvas');
-  const ectx = encCanvas.getContext('2d');
-  encCanvas.width = W; encCanvas.height = H;
+    // FPS + even dims + keep within common AVC level coded area
+    let fps = await estimateFPS(video) || 30;
+    let W = (canvas.width  & ~1), H = (canvas.height & ~1);
+    const MAX_CODED_AREA = 2097152; // ~L4.0/4.1
+    if (W * H > MAX_CODED_AREA) {
+      const s = Math.sqrt(MAX_CODED_AREA / (W*H));
+      W = (Math.max(2, Math.floor(W*s)) & ~1);
+      H = (Math.max(2, Math.floor(H*s)) & ~1);
+    }
 
-  const bitrate = Math.round(W*H*fps*0.12);
+    const encCanvas = document.createElement('canvas');
+    const ectx = encCanvas.getContext('2d');
+    encCanvas.width = W; encCanvas.height = H;
 
-  // Target: stream to disk if we got a writable, otherwise buffer in memory
-  const target = streaming
-    ? new FileSystemWritableFileStreamTarget(writable, { chunkSize: 1<<20 })
-    : new ArrayBufferTarget();
+    const bitrate = Math.round(W*H*fps*0.12);
 
-  const muxer  = new Muxer({
-    target,
-    fastStart: streaming ? 'fragmented' : 'in-memory',
-    minFragmentDuration: 1,
-    video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
-  });
+    const target = streaming
+      ? new FileSystemWritableFileStreamTarget(writable, { chunkSize: 1<<20 })
+      : new ArrayBufferTarget();
 
-  const encoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error:  e => console.error(e)
-  });
+    const muxer  = new Muxer({
+      target,
+      fastStart: streaming ? 'fragmented' : 'in-memory',
+      minFragmentDuration: 1,
+      video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
+    });
 
-  // Try a few H.264 profiles/levels
-  const tries = ['avc1.640029','avc1.4D0029','avc1.420029','avc1.640028','avc1.4D0028','avc1.420028'];
-  let configured = false, lastErr = null;
-  for (const codec of tries) {
+    const encoder = new VideoEncoder({
+      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+      error:  e => console.error(e)
+    });
+
+    const tries = ['avc1.640029','avc1.4D0029','avc1.420029','avc1.640028','avc1.4D0028','avc1.420028'];
+    let configured = false;
+    for (const codec of tries) {
+      try {
+        const sup = await VideoEncoder.isConfigSupported({ codec, width:W, height:H, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate });
+        encoder.configure(sup.config);
+        configured = true; break;
+      } catch {}
+    }
+    if (!configured) { try{ encoder.close(); }catch{} exporting=false; await restore(); return setStatus('No supported H.264 profile/level for this size.'); }
+
     try {
-      const sup = await VideoEncoder.isConfigSupported({ codec, width:W, height:H, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate });
-      encoder.configure(sup.config);
-      configured = true; break;
-    } catch(e){ lastErr = e; }
-  }
-  if (!configured) {
-    try{ encoder.close(); }catch{}
-    if (streaming && writable) { try{ await writable.close(); }catch{} }
-    setStatus('No supported H.264 profile/level for this size on this device.');
-    console.error(lastErr);
-    restore();
-    return;
+      await driveFrames((frameIdx) => {
+        ectx.drawImage(canvas, 0, 0, W, H);
+        const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx * 1e6 / fps) });
+        encoder.encode(vf);
+        vf.close();
+      });
+
+      await encoder.flush();
+      try{ encoder.close(); }catch{}
+      muxer.finalize();
+
+      if (streaming && writable) {
+        await writable.close();
+        setStatus('Saved to disk ✔');
+      } else {
+        const blob = new Blob([target.buffer], { type:'video/mp4' });
+        await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
+        setStatus('Downloaded ✔');
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus('Failed to export MP4.');
+      try{ encoder.close(); }catch{}
+      if (streaming && writable) { try{ await writable.close(); }catch{} }
+    } finally {
+      exporting=false;
+      await restore();
+    }
   }
 
-  // Encode every displayed frame
-  const dur = isFinite(video.duration) ? video.duration : null;
-  let frameIdx = 0;
-  try {
-    await new Promise(resolve=>{
-      const step = (_, meta) => {
+  // ---------- iOS / Safari (MediaRecorder on canvas → MP4) ----------
+  async function saveMP4_SafariMR(){
+    setStatus('Saving… (iOS MediaRecorder)');
+    const restore = await prepPlayback();
+    exporting = true;
+
+    const fps = (await estimateFPS(video)) || 30;
+    const stream = canvas.captureStream(Math.min(30, Math.max(10, fps)));
+    const chunks = [];
+    let mime = 'video/mp4';
+    try{
+      if (typeof MediaRecorder.isTypeSupported==='function') {
+        if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/mp4;codecs=avc1';
+      }
+    }catch{}
+
+    const mr = new MediaRecorder(stream, { mimeType: mime });
+    const done = new Promise((resolve, reject)=>{
+      mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      mr.onerror = e => reject(e.error || e);
+      mr.onstop = resolve;
+    });
+
+    mr.start(250);
+    try {
+      await driveFrames(()=>{}); // overlay already drawn each frame
+    } finally {
+      if (mr.state !== 'inactive') mr.stop();
+      await done;
+    }
+
+    const blob = new Blob(chunks, { type:'video/mp4' });
+    await saveBlobInteractive(blob, `blob-tracking-${canvas.width}x${canvas.height}.mp4`);
+    setStatus('Downloaded ✔');
+
+    exporting=false;
+    await restore();
+  }
+
+  /* ---------- Shared helpers ---------- */
+
+  async function prepPlayback(){
+    const restoreLoop = video.loop, restoreTime = video.currentTime;
+    const wasPaused = paused; paused = false;
+    video.loop = false; video.currentTime = 0;
+    try { await video.play(); } catch {}
+    return async () => {
+      video.loop = restoreLoop;
+      if (wasPaused) { paused = true; video.pause(); } else { try{ await video.play(); }catch{} }
+      video.currentTime = restoreTime;
+    };
+  }
+
+  function driveFrames(onEncode){
+    return new Promise(resolve=>{
+      const dur = isFinite(video.duration) ? video.duration : null;
+      let frameIdx = 0;
+      const step = (_, meta)=>{
         if (video.ended || (dur && video.currentTime >= dur - 0.0009)) return resolve();
 
-        ectx.drawImage(canvas, 0, 0, W, H);
-        const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx++ * 1e6 / fps) });
-        encoder.encode(vf);
-        vf.close();
-
-        if (dur) setStatus(`Saving… ${Math.min(100, Math.round(video.currentTime*100/dur))}%`);
-        video.requestVideoFrameCallback(step);
-      };
-      video.requestVideoFrameCallback(step);
-    });
-
-    await encoder.flush();
-    try{ encoder.close(); }catch{}
-    muxer.finalize();
-
-    if (streaming && writable) {
-      await writable.close();       // file already written progressively
-      setStatus('Saved to disk ✔');
-    } else {
-      const blob = new Blob([target.buffer], { type:'video/mp4' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `blob-tracking-${W}x${H}@${fps}.mp4`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
-      setStatus('Downloaded ✔');
-    }
-  } catch (err) {
-    console.error(err);
-    setStatus('Failed to export MP4.');
-    try{ encoder.close(); }catch{}
-    if (streaming && writable) { try{ await writable.close(); }catch{} }
-  } finally {
-    restore();
-  }
-
-  function restore(){
-    video.loop = restoreLoop;
-    if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
-    video.currentTime = restoreTime;
-  }
-}
-
-
-  // ---- Export loop with progress
-  const dur = isFinite(video.duration) ? video.duration : null;
-  let frameIdx = 0;
-
-  setStatus('Saving… 0%');
-  try {
-    await new Promise(resolve=>{
-      const step = (_,meta)=>{
-        // stop condition (some browsers don’t flip .ended reliably)
-        if (video.ended || (dur && video.currentTime >= dur - 0.0009)) {
-          resolve(); return;
-        }
-
-        // draw + encode
-        ectx.drawImage(canvas, 0, 0, W, H);
-        const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx++ * 1e6 / fps) });
-        encoder.encode(vf);
-        vf.close();
-
-        // progress
-        if (dur) {
-          const pct = Math.min(100, Math.round(video.currentTime * 100 / dur));
-          setStatus(`Saving… ${pct}%`);
-        } else {
-          setStatus('Saving…');
-        }
-
-        video.requestVideoFrameCallback(step);
-      };
-      video.requestVideoFrameCallback(step);
-    });
-
-    await encoder.flush();
-    try{ encoder.close(); }catch{}
-    muxer.finalize();
-
-    if (useStreaming) {
-      await writable.close();                  // file is already written progressively
-      setStatus('Saved to disk ✔');
-    } else {
-      const blob = new Blob([target.buffer], { type:'video/mp4' });
-      // Fallback: trigger a download
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=url; a.download=`blob-tracking-${W}x${H}@${fps}.mp4`;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),2000);
-      setStatus('Downloaded ✔');
-    }
-  } catch (err) {
-    console.error(err);
-    try{ encoder.close(); }catch{}
-    if (useStreaming) { try{ await writable.close(); }catch{} }
-    setStatus('Failed to export MP4.');
-  } finally {
-    restorePlayback();
-  }
-
-  function restorePlayback(){
-    video.loop = restoreLoop;
-    if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
-    video.currentTime = restoreTime;
-  }
-}
-
-    function restorePlayback(){
-      video.loop = restoreLoop;
-      if (wasPaused) { paused = true; video.pause(); } else { video.play().catch(()=>{}); }
-      video.currentTime = restoreTime;
-    }
-  }
-
-  function runExportFrames(onEncode){
-    return new Promise(resolve=>{
-      setStatus('Saving MP4…');
-      let idx = 0;
-      const step = (_,meta)=>{
-        if(video.ended){ resolve(); return; }
-        grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY); cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
+        // recompute + draw overlay (export path owns the processing)
+        grabToSrc();
+        cv.cvtColor(src,gray,cv.CV_RGBA2GRAY);
+        cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
         detectOnCurrentFrame(true);
-        onEncode(idx++); // monotonic microsecond timestamps inside saveMP4
+
+        onEncode(frameIdx++);
+        if (dur) setStatus(`Saving… ${Math.min(100, Math.round(video.currentTime*100/dur))}%`);
         video.requestVideoFrameCallback(step);
       };
       video.requestVideoFrameCallback(step);
@@ -554,20 +540,26 @@ async function saveMP4(){
     });
   }
 
+  // Save via File System Access if available; otherwise download (works on iOS too)
   async function saveBlobInteractive(blob, suggestedName){
-    if('showSaveFilePicker' in window){
-      const handle = await showSaveFilePicker({
-        suggestedName,
-        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
-      });
-      const w = await handle.createWritable(); await w.write(blob); await w.close();
-    }else{
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=url; a.download=suggestedName;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),2000);
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await showSaveFilePicker({
+          suggestedName,
+          types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+        });
+        const w = await handle.createWritable(); await w.write(blob); await w.close();
+        return;
+      } catch { /* fall through to download */ }
     }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = suggestedName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
   }
+
+  // Wire buttons
+  $('#btnSave').disabled=false;
 })();
 </script>
 </body>
