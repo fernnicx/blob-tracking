@@ -100,11 +100,7 @@ window.Module = {
 
 <!-- App -->
 <script type="module">
-/*
-  IMPORTANT: Put the mp4-muxer file at:  libs/mp4-muxer.esm.js
-  For example, from https://unpkg.com/mp4-muxer@5.3.0/dist/mp4-muxer.esm.js
-*/
-import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './libs/mp4-muxer.esm.js';
+import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
 (() => {
   const $=s=>document.querySelector(s);
@@ -112,15 +108,17 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
   const video=$('#video'); video.muted=true; video.playsInline=true;
 
-  const c={scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),alpha:$('#alpha'),
-           maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),linkDist:$('#linkDist'),trailLen:$('#trailLen'),
+  const c={scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
+           alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
+           linkDist:$('#linkDist'),trailLen:$('#trailLen'),
            showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks')};
-  const b={scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),morphVal:$('#morphVal'),
-           alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),maxDistVal:$('#maxDistVal'),
-           linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal')};
+  const b={scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
+           morphVal:$('#morphVal'),alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),
+           maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal')};
 
-  let exporting=false; // prevent double-processing during export
+  function setStatus(t){ const el=$('#status'); el?el.textContent=t:console.log('[status]',t); }
 
+  // badges + handlers
   Object.entries(c).forEach(([k,el])=>{
     if(el?.type==='range'){
       const id=(k==='trailLen')?'trailVal':(k+'Val'); const badge=b[id];
@@ -130,10 +128,9 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
       el.addEventListener('change', ()=>{ if(paused) reprocessPaused(); });
     }
   });
-
-  // Changing processing scale requires reinit (mats depend on size).
   c.scale.addEventListener('change', ()=> start());
 
+  // colors
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -145,7 +142,7 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   const colText=$('#colText'), hexText=$('#hexText');
   bindColor(colBox,hexBox,'#00C2FF'); bindColor(colLine,hexLine,'#9CA3AF'); bindColor(colText,hexText,'#EEEEEE');
 
-  /* Simple centroid tracker */
+  /* ---------- simple tracker ---------- */
   class CentroidTracker{
     constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
     register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
@@ -169,9 +166,15 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
 
   const trails=new Map();
 
-  /* OpenCV objects & loop */
+  /* ---------- OpenCV objects & loop ---------- */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
+
+  // color conversion constant (guard against undefined)
+  let COLOR_RGBA2GRAY = null;
+  function initColorConst(){
+    COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY === 'number') ? cv.COLOR_RGBA2GRAY : cv.COLOR_RGB2GRAY;
+  }
 
   function cleanup(){
     cancelAnimationFrame(animId); animId=null;
@@ -180,11 +183,27 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
     trails.clear();
   }
 
+  function ensureMats(){
+    if(!src || src.cols!==procW || src.rows!==procH){
+      src && src.delete(); gray && gray.delete(); blur && blur.delete();
+      diff && diff.delete(); thr && thr.delete(); bg && bg.delete();
+      src=new cv.Mat(procH,procW,cv.CV_8UC4);
+      gray=new cv.Mat(procH,procW,cv.CV_8UC1);
+      blur=new cv.Mat(procH,procW,cv.CV_8UC1);
+      bg=new cv.Mat(procH,procW,cv.CV_8UC1);
+      diff=new cv.Mat(procH,procW,cv.CV_8UC1);
+      thr=new cv.Mat(procH,procW,cv.CV_8UC1);
+      kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));
+      contours=new cv.MatVector(); hierarchy=new cv.Mat();
+    }
+  }
+
   function grabToSrc(){
+    if(!src) return false;
     bctx.drawImage(video,0,0,procW,procH);
     const im=bctx.getImageData(0,0,procW,procH);
-    if(!src) return;
     src.data.set(im.data);
+    return true;
   }
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
@@ -218,7 +237,6 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
 
   function detectOnCurrentFrame(updateTracker=true){
     const alpha=Math.min(1,Math.max(0,+c.alpha.value/100));
-    if(!paused && !exporting){ cv.addWeighted(bg,(1-alpha),blur,alpha,0,bg); } // freeze bg while paused/exporting
 
     cv.absdiff(blur,bg,diff);
     cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
@@ -247,18 +265,24 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
         if(!trails.has(id)) trails.set(id,[]);
         const arr=trails.get(id); arr.push({x:cx,y:cy}); while(arr.length>maxTrail) arr.shift();
       }
-      drawOverlayFromDetections(boxes, objs, +c.trailLen.value);
+      drawOverlayFromDetections(boxes, objs, maxTrail);
     }else{
       centers.forEach((p,i)=>objs.set(i,p));
       drawOverlayFromDetections(boxes, objs, 0);
     }
+
+    // update background AFTER drawing so paused tweaks show immediately
+    if(!paused){
+      const a = Math.min(1,Math.max(0,+c.alpha.value/100));
+      cv.addWeighted(bg,(1-a),blur,a,0,bg);
+    }
   }
 
-  // Reprocess CURRENT frame when paused (re-grab + recompute blur)
   function reprocessPaused(){
     if(!paused) return;
-    grabToSrc();
-    cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+    ensureMats();
+    if(!grabToSrc()) return;
+    cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
     cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
     detectOnCurrentFrame(false);
   }
@@ -272,16 +296,13 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
       procW=Math.max(64, Math.round(vw*scale)); procH=Math.max(36, Math.round(vh*scale));
       buf.width=procW; buf.height=procH;
 
-      src=new cv.Mat(procH,procW,cv.CV_8UC4);
-      gray=new cv.Mat(procH,procW,cv.CV_8UC1);
-      blur=new cv.Mat(procH,procW,cv.CV_8UC1);
-      bg=new cv.Mat(procH,procW,cv.CV_8UC1);
-      diff=new cv.Mat(procH,procW,cv.CV_8UC1);
-      thr=new cv.Mat(procH,procW,cv.CV_8UC1);
-      kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));
-      contours=new cv.MatVector(); hierarchy=new cv.Mat();
+      ensureMats();
+      initColorConst();
 
-      grabToSrc(); cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY); cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
+      grabToSrc();
+      cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
+
       setStatus(`Running • ${vw}×${vh} (proc ${procW}×${procH})`);
       paused=false; loop();
     }catch(err){ console.error(err); setStatus('Start failed: '+err.message); }
@@ -291,22 +312,20 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   function loop(){
     animId=requestAnimationFrame(loop);
     try{
-      if(!paused && !exporting){
-        grabToSrc();
-        cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+      if(!paused){
+        ensureMats();
+        if(!grabToSrc()) return;
+        cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
         detectOnCurrentFrame(true);
       }
     }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
   }
 
-  /* Sources & UI */
+  /* ------ sources & UI ------ */
   $('#fileInput').onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
     video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
-    const canQT=!!video.canPlayType && video.canPlayType('video/quicktime');
-    const canMP4=!!video.canPlayType && (video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') || video.canPlayType('video/mp4'));
-    if((f.type||'').includes('quicktime') && !canQT && !canMP4){ setStatus('This browser cannot play .mov — convert to .mp4 (H.264).'); return; }
     try{ URL.revokeObjectURL(video.src); }catch{}
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
   };
@@ -326,15 +345,7 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   };
   $('#btnReset').onclick=()=>{
     const d={scale:60,minArea:1200,thresh:200,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20};
-    c.scale.value=d.scale; b.scaleVal.textContent=d.scale;
-    c.minArea.value=d.minArea; b.minAreaVal.textContent=d.minArea;
-    c.thresh.value=d.thresh; b.threshVal.textContent=d.thresh;
-    c.morph.value=d.morph; b.morphVal.textContent=d.morph;
-    c.alpha.value=d.alpha; b.alphaVal.textContent=(d.alpha/100).toFixed(2);
-    c.maxDisappear.value=d.maxDisappear; b.maxDisappearVal.textContent=d.maxDisappear;
-    c.maxDist.value=d.maxDist; b.maxDistVal.textContent=d.maxDist;
-    c.linkDist.value=d.linkDist; b.linkDistVal.textContent=d.linkDist;
-    c.trailLen.value=d.trailLen; b.trailVal.textContent=d.trailLen;
+    for(const [k,v] of Object.entries(d)){ c[k].value=v; (k==='alpha'?b.alphaVal:b[(k==='trailLen')?'trailVal':k+'Val']).textContent=(k==='alpha')?(v/100).toFixed(2):v; }
     hexBox.value='#00C2FF'; colBox.value='#00C2FF';
     hexLine.value='#9CA3AF'; colLine.value='#9CA3AF';
     hexText.value='#EEEEEE'; colText.value='#EEEEEE';
@@ -345,186 +356,103 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
   video.onplay = ()=> setStatus('Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* ---------- Save (.mp4): Desktop (WebCodecs) + iOS (MediaRecorder) ---------- */
-  const hasWebCodecs = ('VideoEncoder' in window) && ('VideoFrame' in window);
-  const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
-  const canMediaRecorderMP4 = ('MediaRecorder' in window);
-
+  /* -------- Save to MP4 (WebCodecs + mp4-muxer) -------- */
   $('#btnSave').onclick = saveMP4;
 
-  async function saveMP4(){
-    if (!video.src || stream) { setStatus('Load a file video first (camera export not supported)'); return; }
-    if (hasWebCodecs && !isiOS) {
-      await saveMP4_WebCodecs();
-    } else if (canMediaRecorderMP4) {
-      await saveMP4_SafariMR();
-    } else {
-      setStatus('This browser cannot export MP4. Try Chrome/Edge (desktop) or Safari (iOS).');
-    }
+  function chooseProfile(width,height,fps,bitrate){
+    // Try high→main→baseline. Many devices accept high for HD, else we downscale.
+    const bases = ['avc1.640028','avc1.4D4020','avc1.42E01E']; // High@L4.0, Main@3.2, Baseline@3.0
+    return bases.map(codec => ({codec,width,height,framerate:fps,hardwareAcceleration:'prefer-hardware',bitrate}));
   }
 
-  // ---------- WebCodecs + mp4-muxer (desktop Chromium) ----------
-  async function saveMP4_WebCodecs(){
-    let writable = null, streaming = false;
-    if (window.isSecureContext && 'showSaveFilePicker' in window) {
-      try {
-        const handle = await showSaveFilePicker({
-          suggestedName: 'blob-tracking.mp4',
-          types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
-        });
-        writable = await handle.createWritable();
-        streaming = true;
-        setStatus('Saving… (streaming to file)');
-      } catch { setStatus('Saving… (will download when finished)'); }
-    } else {
-      setStatus('Saving… (will download when finished)');
+  function clampToH264Area(W,H){
+    const MAX_AREA_BASELINE = 414720; // level 3.0
+    if (W*H <= MAX_AREA_BASELINE) return {W, H, scaled:false};
+    const s = Math.sqrt(MAX_AREA_BASELINE/(W*H));
+    const w = (Math.floor(W*s) & ~1), h = (Math.floor(H*s) & ~1);
+    return {W:w, H:h, scaled:true};
+  }
+
+  async function saveMP4(){
+    if (!video.src || stream) {
+      setStatus('Load a video file first — export from live camera is not supported');
+      return;
+    }
+    if (!('VideoEncoder' in window) || !('VideoFrame' in window)) {
+      setStatus('This browser has no WebCodecs — use Safari (MediaRecorder) or Chrome/Edge.');
+      return;
     }
 
-    const restore = await prepPlayback();
-    exporting = true;
+    const restoreLoop=video.loop, restoreTime=video.currentTime;
+    const wasPaused=paused; paused=false;
+    video.loop=false; video.currentTime=0;
+    try{ await video.play(); }catch{}
 
-    // FPS + even dims + keep within common AVC level coded area
-    let fps = await estimateFPS(video) || 30;
-    let W = (canvas.width  & ~1), H = (canvas.height & ~1);
-    const MAX_CODED_AREA = 2097152; // ~L4.0/4.1
-    if (W * H > MAX_CODED_AREA) {
-      const s = Math.sqrt(MAX_CODED_AREA / (W*H));
-      W = (Math.max(2, Math.floor(W*s)) & ~1);
-      H = (Math.max(2, Math.floor(H*s)) & ~1);
-    }
+    const fps = await estimateFPS(video) || 30;
 
-    const encCanvas = document.createElement('canvas');
-    const ectx = encCanvas.getContext('2d');
-    encCanvas.width = W; encCanvas.height = H;
+    // Even dimensions; clamp if baseline would fail
+    const W0=(canvas.width&~1), H0=(canvas.height&~1);
+    let {W,H} = clampToH264Area(W0,H0);
 
-    const bitrate = Math.round(W*H*fps*0.12);
+    const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H;
+    const ectx=encCanvas.getContext('2d');
 
-    const target = streaming
-      ? new FileSystemWritableFileStreamTarget(writable, { chunkSize: 1<<20 })
-      : new ArrayBufferTarget();
+    try{
+      const bitrate = Math.round(W*H*fps*0.12);
+      let ok=null;
+      for(const cfg of chooseProfile(W,H,fps,bitrate)){
+        const sup = await VideoEncoder.isConfigSupported(cfg).catch(()=>null);
+        if(sup?.supported){ ok=sup.config; break; }
+      }
+      if(!ok){ setStatus('Encoder config not supported for this size; try smaller scale.'); return; }
 
-    const muxer  = new Muxer({
-      target,
-      fastStart: streaming ? 'fragmented' : 'in-memory',
-      minFragmentDuration: 1,
-      video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
-    });
+      const target=new ArrayBufferTarget();
+      const muxer = new Muxer({
+        target,
+        fastStart: 'in-memory',
+        video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
+      });
 
-    const encoder = new VideoEncoder({
-      output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-      error:  e => console.error(e)
-    });
+      const encoder=new VideoEncoder({
+        output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta),
+        error:e=>console.error(e)
+      });
+      encoder.configure(ok);
 
-    const tries = ['avc1.640029','avc1.4D0029','avc1.420029','avc1.640028','avc1.4D0028','avc1.420028'];
-    let configured = false;
-    for (const codec of tries) {
-      try {
-        const sup = await VideoEncoder.isConfigSupported({ codec, width:W, height:H, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate });
-        encoder.configure(sup.config);
-        configured = true; break;
-      } catch {}
-    }
-    if (!configured) { try{ encoder.close(); }catch{} exporting=false; await restore(); return setStatus('No supported H.264 profile/level for this size.'); }
-
-    try {
-      await driveFrames((frameIdx) => {
-        ectx.drawImage(canvas, 0, 0, W, H);
-        const vf = new VideoFrame(encCanvas, { timestamp: Math.round(frameIdx * 1e6 / fps) });
+      await driveFrames((frameIdx)=>{
+        ectx.drawImage(canvas,0,0,W,H);
+        const vf=new VideoFrame(encCanvas,{timestamp:Math.round(frameIdx*1e6/fps)});
         encoder.encode(vf);
         vf.close();
       });
 
       await encoder.flush();
-      try{ encoder.close(); }catch{}
       muxer.finalize();
 
-      if (streaming && writable) {
-        await writable.close();
-        setStatus('Saved to disk ✔');
-      } else {
-        const blob = new Blob([target.buffer], { type:'video/mp4' });
-        await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
-        setStatus('Downloaded ✔');
-      }
-    } catch (err) {
+      const blob=new Blob([target.buffer],{type:'video/mp4'});
+      await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
+      setStatus('Exported .mp4');
+    }catch(err){
       console.error(err);
-      setStatus('Failed to export MP4.');
-      try{ encoder.close(); }catch{}
-      if (streaming && writable) { try{ await writable.close(); }catch{} }
-    } finally {
-      exporting=false;
-      await restore();
+      setStatus('Failed to export MP4. Keep the tab focused and try again.');
+    }finally{
+      video.loop=restoreLoop;
+      if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
+      video.currentTime=restoreTime;
     }
-  }
-
-  // ---------- iOS / Safari (MediaRecorder on canvas → MP4) ----------
-  async function saveMP4_SafariMR(){
-    setStatus('Saving… (iOS MediaRecorder)');
-    const restore = await prepPlayback();
-    exporting = true;
-
-    const fps = (await estimateFPS(video)) || 30;
-    const stream = canvas.captureStream(Math.min(30, Math.max(10, fps)));
-    const chunks = [];
-    let mime = 'video/mp4';
-    try{
-      if (typeof MediaRecorder.isTypeSupported==='function') {
-        if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/mp4;codecs=avc1';
-      }
-    }catch{}
-
-    const mr = new MediaRecorder(stream, { mimeType: mime });
-    const done = new Promise((resolve, reject)=>{
-      mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-      mr.onerror = e => reject(e.error || e);
-      mr.onstop = resolve;
-    });
-
-    mr.start(250);
-    try {
-      await driveFrames(()=>{}); // overlay already drawn each frame
-    } finally {
-      if (mr.state !== 'inactive') mr.stop();
-      await done;
-    }
-
-    const blob = new Blob(chunks, { type:'video/mp4' });
-    await saveBlobInteractive(blob, `blob-tracking-${canvas.width}x${canvas.height}.mp4`);
-    setStatus('Downloaded ✔');
-
-    exporting=false;
-    await restore();
-  }
-
-  /* ---------- Shared helpers ---------- */
-
-  async function prepPlayback(){
-    const restoreLoop = video.loop, restoreTime = video.currentTime;
-    const wasPaused = paused; paused = false;
-    video.loop = false; video.currentTime = 0;
-    try { await video.play(); } catch {}
-    return async () => {
-      video.loop = restoreLoop;
-      if (wasPaused) { paused = true; video.pause(); } else { try{ await video.play(); }catch{} }
-      video.currentTime = restoreTime;
-    };
   }
 
   function driveFrames(onEncode){
     return new Promise(resolve=>{
-      const dur = isFinite(video.duration) ? video.duration : null;
-      let frameIdx = 0;
-      const step = (_, meta)=>{
-        if (video.ended || (dur && video.currentTime >= dur - 0.0009)) return resolve();
-
-        // recompute + draw overlay (export path owns the processing)
-        grabToSrc();
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY); 
+      setStatus('Saving MP4…');
+      const step=(_,meta)=>{
+        if(video.ended){ resolve(); return; }
+        ensureMats();
+        if(!grabToSrc()){ resolve(); return; }
+        cv.cvtColor(src,gray,COLOR_RGBA2GRAY);         // <-- safe constant
         cv.GaussianBlur(gray,blur,new cv.Size(5,5),0,0);
         detectOnCurrentFrame(true);
-
-        onEncode(frameIdx++);
-        if (dur) setStatus(`Saving… ${Math.min(100, Math.round(video.currentTime*100/dur))}%`);
+        onEncode(meta.presentedFrames||0);
         video.requestVideoFrameCallback(step);
       };
       video.requestVideoFrameCallback(step);
@@ -540,27 +468,29 @@ import { Muxer, ArrayBufferTarget, FileSystemWritableFileStreamTarget } from './
     });
   }
 
-  // Save via File System Access if available; otherwise download (works on iOS too)
+  // Save picker (Chromium) or forced download (iOS/Safari)
   async function saveBlobInteractive(blob, suggestedName){
-    if ('showSaveFilePicker' in window) {
-      try {
-        const handle = await showSaveFilePicker({
-          suggestedName,
-          types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
-        });
-        const w = await handle.createWritable(); await w.write(blob); await w.close();
-        return;
-      } catch { /* fall through to download */ }
+    const canPicker = 'showSaveFilePicker' in window;
+    if(canPicker){
+      const handle = await showSaveFilePicker({
+        suggestedName,
+        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+      });
+      const w = await handle.createWritable(); await w.write(blob); await w.close();
+    }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download=suggestedName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1500);
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = suggestedName;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 2000);
   }
 
-  // Wire buttons
-  $('#btnSave').disabled=false;
+  // OpenCV loader hooks
+  window.__cvReady=false; window.__videoReady=false;
+  window.Module={ onRuntimeInitialized(){ window.__cvReady=true; setStatus('OpenCV.js ready'); if(window.__videoReady) start(); } };
 })();
 </script>
+
 </body>
 </html>
