@@ -353,7 +353,12 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       const cfg={codec:'avc1.42E01E', width:W, height:H, framerate:fps, hardwareAcceleration:'prefer-hardware', bitrate};
       const sup=await VideoEncoder.isConfigSupported(cfg);
       const target=new ArrayBufferTarget();
-      const muxer=new Muxer({target, fastStart:true, video:{width:W,height:H,codec:'avc1.42E01E',timescale:fps}});
+      const muxer = new Muxer({
+            target: muxTarget,
+            fastStart: true,
+            video: { codec: 'avc', width: W, height: H, timescale: fps, frameRate: fps }
+          });
+
       const encoder=new VideoEncoder({output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta), error:e=>console.error(e)});
       encoder.configure(sup.config);
 
