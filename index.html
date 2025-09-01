@@ -6,22 +6,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-    /* ChatGPT-ish dark theme */
-    --bg:#0F1115;
-    --panel:#13161A;
-    --canvas:#0E1116;
-    --fg:#ECEDEE;
-    --muted:#A1A7B3;
-    --line:#2A2F3A;
-    --accent:#C084FC;
-    --chip:#171A20;
+    --bg:#0F1115; --panel:#13161A; --canvas:#0E1116;
+    --fg:#ECEDEE; --muted:#A1A7B3; --line:#2A2F3A;
+    --accent:#C084FC; --chip:#171A20;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Helvetica, Arial, sans-serif}
   header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
   h1{margin:0;font-size:18px}
-
   #stageWrap{padding:12px 16px 96px}
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
@@ -61,9 +54,7 @@
 
   <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
 
-  <!-- Control panels (no section titles) -->
   <div class="controls">
-
     <!-- Processing -->
     <section class="panel">
       <div class="grid">
@@ -102,12 +93,27 @@
 
     <!-- Display -->
     <section class="panel">
-      <div class="checkline">
-        <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
-        <label><input type="checkbox" id="showCoord" checked> Show Coords</label>
-        <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
-        <label><input type="checkbox" id="showLinks" checked> Show Links</label>
-        <label><input type="checkbox" id="showPoints"> Show Points</label>
+      <div class="grid">
+        <div class="ctl">
+          <label>Visibility</label>
+          <div class="checkline">
+            <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
+            <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
+            <label><input type="checkbox" id="showLinks" checked> Show Links</label>
+            <label><input type="checkbox" id="showPoints"> Show Points</label>
+            <label><input type="checkbox" id="showLabels" checked> Show Labels</label>
+          </div>
+        </div>
+        <div class="ctl">
+          <label>Label Mode</label>
+          <div class="row-inline">
+            <select id="labelMode">
+              <option value="coords" selected>Coordinates</option>
+              <option value="text">Custom Text</option>
+            </select>
+            <input id="labelText" class="hex" placeholder="label text" value="fern" disabled>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -117,10 +123,10 @@
 <div class="bar">
   <div class="wrap">
     <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
-    <button id="btnCam" class="primary">Camera Mode</button>
     <button id="btnRestart">Restart Video</button>
     <button id="btnPause">Pause</button>
     <button id="btnReset" class="ghost">Reset Settings</button>
+    <button id="btnCam" class="primary">Camera Mode</button>
     <span class="push"></span>
     <button id="btnSave" class="primary">Save</button>
   </div>
@@ -151,9 +157,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
-    showBoxes:$('#showBoxes'),showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),
+    showBoxes:$('#showBoxes'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),showPoints:$('#showPoints'),
+    showLabels:$('#showLabels'),
     boxThick:$('#boxThick'), lineWidth:$('#lineWidth'), textSize:$('#textSize'),
-    showPoints:$('#showPoints')
+    labelMode:$('#labelMode'), labelText:$('#labelText')
   };
   const b={
     scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
@@ -162,14 +169,19 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     boxThickVal:$('#boxThickVal'), lineWidthVal:$('#lineWidthVal'), textSizeVal:$('#textSizeVal'),
   };
 
-  Object.entries(c).forEach(([k,el])=>{
+  Object.values(c).forEach(el=>{
     if(el?.type==='range'){
-      const map={trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal'};
-      const id=map[k] || (k+'Val'); const badge=b[id];
-      const upd=()=>badge.textContent=(k==='alpha')?(+el.value/100).toFixed(2):el.value;
-      el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd();
-    }else if(el?.type==='checkbox'){
-      el.addEventListener('change', ()=>{ if(paused) reprocessPaused(); });
+      const id=el.id+'Val';
+      const badge=b[id] || (el.id==='boxThick'?b.boxThickVal:el.id==='lineWidth'?b.lineWidthVal:el.id==='textSize'?b.textSizeVal:null);
+      const upd=()=>badge&&(badge.textContent=(el.id==='alpha')?(+el.value/100).toFixed(2):el.value);
+      el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd?.();
+    }else if(el?.type==='checkbox' || el?.tagName==='SELECT'){
+      el.addEventListener('change', ()=>{
+        if(el===c.labelMode){ c.labelText.disabled = (c.labelMode.value!=='text'); }
+        if(paused) reprocessPaused();
+      });
+    }else if(el===c.labelText){
+      el.addEventListener('input', ()=>{ if(paused) reprocessPaused(); });
     }
   });
   c.scale.addEventListener('change', ()=> start());
@@ -181,9 +193,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     colorEl.addEventListener('input', ()=>{ hexEl.value=colorEl.value.toUpperCase(); if(paused) reprocessPaused(); });
     hexEl.addEventListener('change', ()=>{ hexEl.value=norm(hexEl.value); colorEl.value=hexEl.value; if(paused) reprocessPaused(); });
   }
-  const colBox=$('#colBox'), hexBox=$('#hexBox'); bindColor(colBox,hexBox,'#FF0000');
-  const colLine=$('#colLine'), hexLine=$('#hexLine'); bindColor(colLine,hexLine,'#FF0000');
-  const colText=$('#colText'), hexText=$('#hexText'); bindColor(colText,hexText,'#EEEEEE');
+  const colBox=document.getElementById('colBox'), hexBox=document.getElementById('hexBox'); bindColor(colBox,hexBox,'#FF0000');
+  const colLine=document.getElementById('colLine'), hexLine=document.getElementById('hexLine'); bindColor(colLine,hexLine,'#FF0000');
+  const colText=document.getElementById('colText'), hexText=document.getElementById('hexText'); bindColor(colText,hexText,'#EEEEEE');
 
   /* Tracker */
   class CentroidTracker{
@@ -204,17 +216,16 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
   let tracker=new CentroidTracker(+c.maxDisappear.value,+c.maxDist.value);
-  c.maxDisappear.oninput=()=>tracker.maxDisappeared=+c.maxDisappear.value;
-  c.maxDist.oninput=()=>tracker.maxDistance=+c.maxDist.value;
+  c.maxDisappear?.addEventListener('input',()=>tracker.maxDisappeared=+c.maxDisappear.value);
+  c.maxDist?.addEventListener('input',()=>tracker.maxDistance=+c.maxDist.value);
 
   const trails=new Map();
 
   /* OpenCV & loop */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
-  let mirrorPreview=false; // mirror when camera is on (preview & overlays), not for file videos
+  let mirrorPreview=false; // mirror overlays when camera on
 
-  // color conversion const
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
     COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY === 'number') ? cv.COLOR_RGBA2GRAY : cv.COLOR_RGB2GRAY;
@@ -244,11 +255,16 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   function grabToSrc(){
     if(!src) return false;
-    // always process the raw (non-mirrored) frame
-    bctx.drawImage(video,0,0,procW,procH);
+    bctx.drawImage(video,0,0,procW,procH);           // always grab real orientation
     const im=bctx.getImageData(0,0,procW,procH);
     src.data.set(im.data);
     return true;
+  }
+
+  function labelString(cx,cy){
+    if(!c.showLabels.checked) return null;
+    if(c.labelMode.value==='text') return c.labelText.value || '';
+    return `${cx.toFixed(2)}, ${cy.toFixed(2)}`;
   }
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
@@ -257,72 +273,46 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     if (mirrorPreview){
-      // Draw mirrored preview and overlays
-      ctx.save();
-      ctx.translate(canvas.width,0);
-      ctx.scale(-1,1);
+      ctx.save(); ctx.translate(canvas.width,0); ctx.scale(-1,1);
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
-      if(c.showBoxes.checked){
-        ctx.lineWidth=+c.boxThick.value;
-        ctx.strokeStyle=hexBox.value;
-        boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
-      }
+      if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=hexBox.value; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
       if(c.showLinks.checked){
         const pts=[...objs.values()].map(([x,y])=>({x,y}));
         const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
-        for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
-          const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
-          if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
-        }
+        for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y); if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); } }
       }
       if(c.showTrail.checked && maxTrail>0){
         ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
         for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
       }
+      ctx.restore(); // draw text in readable orientation
 
-      // Text: draw unmirrored so it reads correctly
-      ctx.restore(); // back to normal space for text
       ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
       for(const [id,[cx,cy]] of objs.entries()){
-        const dx = canvas.width - cx;           // mirrored x
-        if (c.showPoints.checked){
-          ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill();
-        }
-        const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
-        ctx.fillStyle=hexText.value; ctx.fillText(txt,dx+8,cy-8);
+        const dx = canvas.width - cx;      // mirrored x
+        if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill(); }
+        const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=hexText.value; ctx.fillText(txt,dx+8,cy-8); }
       }
       return;
     }
 
-    // Normal (not mirrored)
+    // normal
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-    if(c.showBoxes.checked){
-      ctx.lineWidth=+c.boxThick.value;
-      ctx.strokeStyle=hexBox.value;
-      boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
-    }
+    if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=hexBox.value; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
       const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
-      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
-        const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
-        if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
-      }
+      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y); if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); } }
     }
     if(c.showTrail.checked && maxTrail>0){
       ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
       for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
-
     ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
     for(const [id,[cx,cy]] of objs.entries()){
-      if (c.showPoints.checked){
-        ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
-      }
-      const txt=c.showCoord.checked?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:`ID ${id}`;
-      ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8);
+      if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill(); }
+      const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8); }
     }
   }
 
@@ -415,14 +405,16 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     const f=e.target.files[0]; if(!f) return;
     if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
     mirrorPreview=false;
+    video.srcObject=null;
     video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
     try{ URL.revokeObjectURL(video.src); }catch{}
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
   };
 
+  // Camera toggle
   $('#btnCam').onclick=async()=>{
     try{
-      if(stream){ stream.getTracks().forEach(t=>t.stop()); }
+      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mirrorPreview=false; video.srcObject=null; setStatus('Camera stopped'); return; }
       const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
       stream=s; video.loop=false; video.onended=null; video.srcObject=s; mirrorPreview=true;
       await video.play(); setStatus('Camera started (mirrored)');
@@ -434,20 +426,22 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; }
     paused=!paused;
     if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); $('#btnPause').textContent='Resume'; reprocessPaused(); }
-    else{ video.play(); setStatus('Playing…'); $('#btnPause').textContent='Pause'; if(animId===null) loop(); }
+    else{ video.play(); setStatus(mirrorPreview?'Playing (mirrored)…':'Playing…'); $('#btnPause').textContent='Pause'; if(animId===null) loop(); }
   };
 
   $('#btnReset').onclick=()=>{
     const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14};
     for(const [k,v] of Object.entries(d)){
-      c[k].value=v;
-      (k==='alpha'?b.alphaVal:b[(k==='trailLen')?'trailVal':(k==='boxThick')?'boxThickVal':(k==='lineWidth')?'lineWidthVal':(k==='textSize')?'textSizeVal':k+'Val']).textContent=(k==='alpha')?(v/100).toFixed(2):v;
+      const el=c[k]; if(!el) continue; el.value=v;
+      const badge = b[k+'Val'] || (k==='boxThick'?b.boxThickVal:k==='lineWidth'?b.lineWidthVal:k==='textSize'?b.textSizeVal:null);
+      badge && (badge.textContent=(k==='alpha')?(v/100).toFixed(2):v);
     }
     hexBox.value='#FF0000'; colBox.value='#FF0000';
     hexLine.value='#FF0000'; colLine.value='#FF0000';
     hexText.value='#EEEEEE'; colText.value='#EEEEEE';
-    c.showBoxes.checked=c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
-    c.showPoints.checked=false;
+    c.showBoxes.checked=c.showTrail.checked=c.showLinks.checked=true;
+    c.showPoints.checked=false; c.showLabels.checked=true;
+    c.labelMode.value='coords'; c.labelText.value='fern'; c.labelText.disabled=true;
     start();
   };
 
@@ -455,100 +449,106 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   video.onplay = ()=> setStatus(mirrorPreview ? 'Playing (mirrored)…' : 'Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* -------- Save to MP4 (WebCodecs + mp4-muxer) -------- */
-  async function getSaveWriter(suggestedName){
-    if (!('showSaveFilePicker' in window)) return null; // iOS/Safari fallback
-    try{
-      const handle = await showSaveFilePicker({
-        suggestedName,
-        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
-      });
-      return await handle.createWritable();
-    }catch(err){
-      console.warn('Save picker canceled or blocked:', err);
-      return null;
-    }
-  }
-
-  $('#btnSave').addEventListener('click', async () => {
-    if (!video.src && !stream) { setStatus('Load a video file first'); return; }
-    if (stream) { setStatus('Export from live camera is not supported'); return; }
-
-    const fps = await estimateFPS(video) || 30;
-    const W0=(canvas.width&~1), H0=(canvas.height&~1);
-    const suggested = `blob-tracking-${W0}x${H0}@${fps}.mp4`;
-
-    const writer = await getSaveWriter(suggested);
-    await saveViaWebCodecs(writer, suggested, fps);
-  });
-
-  function chooseProfile(width,height,fps,bitrate){
-    return [
-      {codec:'avc1.640028', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // High@4.0
-      {codec:'avc1.4D401F', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Main@3.1
-      {codec:'avc1.42E01E', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Baseline@3.0
+  /* -------- Saving (MediaRecorder preferred, WebCodecs fallback) -------- */
+  function pickRecorderType(){
+    if(!('MediaRecorder' in window) || !canvas.captureStream) return null;
+    const candidates=[
+      'video/mp4;codecs=avc1.42E01E',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
     ];
+    for(const t of candidates){
+      if(MediaRecorder.isTypeSupported?.(t)) return t;
+    }
+    return null;
   }
 
-  async function saveViaWebCodecs(writer, suggestedName, fps){
-    const restoreLoop=video.loop, restoreTime=video.currentTime;
-    const wasPaused=paused; paused=false;
-    video.loop=false; video.currentTime=0;
-    try{ await video.play(); }catch{}
+  async function saveViaMediaRecorder(){
+    const fps = await estimateFPS(video) || 30;
+    const W=canvas.width, H=canvas.height;
+    const mime = pickRecorderType();
+    if(!mime) return false; // not supported
 
+    // restart playback from beginning for consistent recording
+    const restoreLoop=video.loop, restoreTime=video.currentTime;
+    const wasPaused=paused; paused=false; video.loop=false; video.currentTime=0; try{ await video.play(); }catch{}
+
+    const streamCanvas = canvas.captureStream(fps);
+    const chunks=[];
+    const opts={mimeType:mime, bitsPerSecond: Math.max(600_000, Math.round(W*H*fps*0.12))};
+    const rec=new MediaRecorder(streamCanvas,opts);
+    rec.ondataavailable=e=>{ if(e.data && e.data.size>0) chunks.push(e.data); };
+    const done=new Promise(res=>{ rec.onstop=res; });
+
+    // progress
+    const totalFrames = Number.isFinite(video.duration) ? Math.max(1, Math.round(video.duration*fps)) : null;
+    let i=0;
+    const tick=()=>{ if(rec.state!=='recording') return; if(video.ended){ rec.stop(); return; } 
+      if(totalFrames){ const pct=Math.min(100,Math.round(++i/totalFrames*100)); setStatus(`Saving… ${pct}% (${i}/${totalFrames})`); }
+      video.requestVideoFrameCallback(()=>tick());
+    };
+
+    rec.start(1000); // timeslice for dataavailable
+    tick();
+
+    await done;
+    const blob=new Blob(chunks,{type:mime.includes('mp4')?'video/mp4':'video/webm'});
+
+    await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.${mime.includes('mp4')?'mp4':'webm'}`);
+
+    // restore playback state
+    video.loop=restoreLoop;
+    if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
+    video.currentTime=restoreTime;
+    setStatus('Exported video');
+    return true;
+  }
+
+  async function saveViaWebCodecs(){
+    if (!('VideoEncoder' in window) || !('VideoFrame' in window)) return false;
+    const fps = await estimateFPS(video) || 30;
     const W=(canvas.width&~1), H=(canvas.height&~1);
-    const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H;
-    const ectx=encCanvas.getContext('2d');
+
+    const restoreLoop=video.loop, restoreTime=video.currentTime;
+    const wasPaused=paused; paused=false; video.loop=false; video.currentTime=0; try{ await video.play(); }catch{}
 
     try{
       const bitrate = Math.max(300_000, Math.round(W*H*fps*0.10));
-      let cfg=null;
-      for(const c of chooseProfile(W,H,fps,bitrate)){
-        const sup = await VideoEncoder.isConfigSupported(c).catch(()=>null);
-        if(sup?.supported){ cfg=sup.config; break; }
-      }
-      if(!cfg){ setStatus('Encoder config not supported for this size; try smaller Processing Scale.'); return; }
+      const cfgs=[
+        {codec:'avc1.640028', width:W, height:H, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
+        {codec:'avc1.4D401F', width:W, height:H, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
+        {codec:'avc1.42E01E', width:W, height:H, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
+      ];
+      let cfg=null; for(const c of cfgs){ const sup=await VideoEncoder.isConfigSupported(c).catch(()=>null); if(sup?.supported){ cfg=sup.config; break; } }
+      if(!cfg) return false;
 
       const target=new ArrayBufferTarget();
-      const muxer = new Muxer({
-        target,
-        fastStart: 'in-memory',
-        firstTimestampBehavior: 'offset',
-        video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
-      });
+      const muxer = new Muxer({ target, fastStart:'in-memory', firstTimestampBehavior:'offset', video:{codec:'avc',width:W,height:H,timescale:fps,frameRate:fps}});
+      const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H; const ectx=encCanvas.getContext('2d');
 
-      let encoded = 0;
-      const encoder=new VideoEncoder({
-        output:(chunk,meta)=>{ muxer.addVideoChunk(chunk,meta); encoded++; },
-        error:e=>console.error(e)
-      });
+      const encoder=new VideoEncoder({ output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta), error:e=>console.error(e) });
       encoder.configure(cfg);
 
       const totalFrames = Number.isFinite(video.duration) ? Math.max(1, Math.round(video.duration*fps)) : null;
-
-      await driveFrames((i)=>{
-        ectx.drawImage(canvas,0,0,W,H);
-        const vf=new VideoFrame(encCanvas,{timestamp:Math.round(i*1e6/fps)});
-        encoder.encode(vf);
-        vf.close();
-        if(totalFrames){
-          const pct=Math.min(100, Math.round((i+1)/totalFrames*100));
-          setStatus(`Saving… ${pct}% (${i+1}/${totalFrames})`);
-        }else{
-          setStatus(`Saving… ${i+1} frames`);
-        }
+      let i=0;
+      await new Promise(resolve=>{
+        const step=()=>{ if(video.ended){ resolve(); return; }
+          ectx.drawImage(canvas,0,0,W,H);
+          const vf=new VideoFrame(encCanvas,{timestamp:Math.round(i*1e6/fps)}); encoder.encode(vf); vf.close();
+          if(totalFrames){ const pct=Math.min(100,Math.round((++i)/totalFrames*100)); setStatus(`Saving… ${pct}% (${i}/${totalFrames})`); }
+          video.requestVideoFrameCallback(step);
+        };
+        video.requestVideoFrameCallback(step);
       });
 
-      await encoder.flush();
-      muxer.finalize();
-
+      await encoder.flush(); muxer.finalize();
       const blob=new Blob([target.buffer],{type:'video/mp4'});
-      if(writer){ await writer.write(blob); await writer.close(); }
-      else{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=suggestedName; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+      await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
       setStatus('Exported .mp4');
-    }catch(err){
-      console.error(err);
-      setStatus('Failed to export MP4. Keep the tab focused and try again.');
+
+      return true;
     }finally{
       video.loop=restoreLoop;
       if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
@@ -556,29 +556,41 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
 
-  function driveFrames(onEncode){
-    return new Promise(resolve=>{
-      setStatus('Saving… 0%');
-      let i = 0;
-      const step = () => {
-        if (video.ended) { resolve(); return; }
-        ensureMats();
-        if (!grabToSrc()) { resolve(); return; }
-        cv.cvtColor(src, gray, COLOR_RGBA2GRAY);
-        cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0);
-        detectOnCurrentFrame(true);
-        onEncode(i++);
-        video.requestVideoFrameCallback(step);
-      };
-      video.requestVideoFrameCallback(step);
-    });
+  async function saveBlobInteractive(blob, suggestedName){
+    const canPicker = 'showSaveFilePicker' in window;
+    if(canPicker){
+      try{
+        const handle = await showSaveFilePicker({
+          suggestedName,
+          types:[{description:'Video File', accept:{[blob.type.includes('mp4')?'video/mp4':'video/webm']:[blob.type.includes('mp4')?'.mp4':'.webm']}}],
+        });
+        const w = await handle.createWritable(); await w.write(blob); await w.close();
+      }catch(e){ console.warn(e); /* user canceled */ }
+    }else{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=suggestedName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    }
   }
 
+  document.getElementById('btnSave').addEventListener('click', async ()=>{
+    setStatus('Preparing to save…');
+    // Prefer MediaRecorder
+    const okRecorder = await saveViaMediaRecorder();
+    if(okRecorder) return;
+    // Fallback to WebCodecs
+    const okWebCodecs = await saveViaWebCodecs();
+    if(okWebCodecs) return;
+    setStatus('Saving not supported on this browser.');
+  });
+
+  /* Helpers */
   async function estimateFPS(v){
     return new Promise(res=>{
-      if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(null);
-      let f=0, t0=null;
-      const cb=(_,meta)=>{ f++; if(t0==null) t0=meta.mediaTime; if(meta.mediaTime-t0>=1){ res(f); } else v.requestVideoFrameCallback(cb); };
+      if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(30);
+      let f=0,t0=null;
+      const cb=(_,meta)=>{ f++; if(t0==null) t0=meta.mediaTime; if(meta.mediaTime-t0>=1){ res(f||30); } else v.requestVideoFrameCallback(cb); };
       v.requestVideoFrameCallback(cb);
     });
   }
