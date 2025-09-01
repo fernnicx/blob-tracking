@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-    /* ChatGPT-ish dark theme */
     --bg:#0F1115;
     --panel:#13161A;
     --canvas:#0E1116;
@@ -14,49 +13,57 @@
     --muted:#A1A7B3;
     --line:#2A2F3A;
     --accent:#2a3754;   /* dark navy */
-    --accent-2:#344566;
     --chip:#171A20;
     --input:#1B2028;
     --input-soft:#212734;
+    --barH:54px;        /* compact bottom bar height */
+    --headerH:52px;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Helvetica, Arial, sans-serif}
 
-  header{position:sticky;top:0;z-index:7;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
-  h1{margin:0;font-size:18px;font-weight:600} /* semi-bold (Medium) */
+  /* Header */
+  header{
+    position:sticky;top:0;z-index:9;
+    display:flex;align-items:center;justify-content:space-between;
+    height:var(--headerH);padding:0 14px;
+    border-bottom:1px solid var(--line);background:var(--panel)
+  }
+  h1{margin:0;font-size:18px;font-weight:600}
 
-  #stageWrap{padding:12px 16px 96px}
+  /* Controls toggle lives inside header (same Y-axis as title) */
+  #ctlToggle{
+    border:1px solid var(--line); background:var(--chip); color:var(--fg);
+    padding:8px 12px; border-radius:12px; cursor:pointer; height:34px; display:flex; align-items:center; gap:8px;
+  }
+
+  #stageWrap{padding:12px 16px calc(var(--barH) + 18px)}
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
 
-  /* centered status */
-  #statusWrap{display:flex;justify-content:center;margin:12px 0 18px}
-  #status{padding:10px 16px;border-radius:14px;font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:260px;text-align:center}
+  /* status */
+  #statusWrap{display:flex;justify-content:center;margin:12px 0 10px}
+  #status{padding:8px 14px;border-radius:12px;font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:240px;text-align:center}
 
-  /* ---------- Controls drawer ---------- */
-  #ctlToggle{
-    position:fixed; top:14px; right:14px; z-index:8;
-    border:1px solid var(--line); background:var(--chip); color:var(--fg);
-    padding:10px 14px; border-radius:12px; cursor:pointer;
-  }
-  #ctlToggle .icon{margin-right:8px}
+  /* ---------- Right drawer (desktop), inline (mobile) ---------- */
   #drawer{
-    position:fixed; top:62px; right:14px; z-index:7;
-    width:min(420px,92vw); height:calc(100vh - 88px);
+    position:fixed; right:14px; top:calc(var(--headerH) + 10px); z-index:8;
+    width:min(420px,92vw); height:calc(100vh - var(--headerH) - 20px);
     border:1px solid var(--line); background:var(--panel); border-radius:14px;
-    box-shadow:0 10px 30px rgba(0,0,0,.4);
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
     overflow:auto; padding:14px; display:none;
+    padding-bottom:calc(14px + var(--barH)); /* so the bottom bar never covers */
   }
   #drawer.open{display:block}
-  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;margin-bottom:14px}
-  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+
+  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:14px;margin-bottom:12px}
+  .grid{display:grid;grid-template-columns:1fr;gap:14px}
   .ctl{display:flex;flex-direction:column;gap:8px}
   .ctl label{color:var(--muted);font-size:13px}
   .row-inline{display:flex;align-items:center;gap:10px}
   .row-inline span{color:var(--muted);font-size:13px;min-width:92px}
 
-  /* inputs */
   input[type="range"]{width:100%;accent-color:var(--accent)}
   input[type="color"]{
     width:44px;height:36px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--input);cursor:pointer
@@ -65,46 +72,65 @@
     width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;
     background:var(--input);color:var(--fg)
   }
-  select.textbox{appearance:none;background:var(--input) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="10" viewBox="0 0 14 10"><path fill="%23A1A7B3" d="M1 1l6 8 6-8"/></svg>') no-repeat right 10px center;padding-right:32px}
+  select.textbox{
+    appearance:none;background:var(--input)
+      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="10" viewBox="0 0 14 10"><path fill="%23A1A7B3" d="M1 1l6 8 6-8"/></svg>')
+      no-repeat right 10px center;
+    padding-right:32px
+  }
 
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
   .checkline{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
   .checkline label{display:flex;align-items:center;gap:8px}
   input[type="checkbox"]{accent-color:var(--accent)}
+  .percent{font-size:12px;color:var(--muted);background:var(--chip);border:1px solid var(--line);padding:4px 8px;border-radius:999px}
 
-  /* ---------- Bottom bar ---------- */
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.78)),var(--panel);border-top:1px solid var(--line);padding:10px 16px;transition:transform .25s ease}
-  .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  /* ---------- Compact bottom toolbar ---------- */
+  .bar{
+    position:fixed;left:0;right:0;bottom:0;z-index:6;
+    height:var(--barH);
+    background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.75)),var(--panel);
+    border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:8px;padding:6px 10px;transition:transform .25s ease
+  }
   .bar.hidden{transform:translateY(110%)}
-  .showBar{position:fixed;right:16px;bottom:16px;z-index:6;display:none}
+  .showBar{
+    position:fixed;left:12px;bottom:12px;z-index:6;display:none;
+    border:1px solid var(--line);background:var(--chip);color:var(--fg);
+    padding:8px 12px;border-radius:12px;cursor:pointer
+  }
   .bar.hidden + .showBar{display:block}
 
-  /* grouped actions in bar */
-  .group{display:flex;gap:10px;flex-wrap:wrap;align-items:center;border:1px solid var(--line);background:var(--chip);border-radius:12px;padding:8px 10px}
+  .wrap{display:flex;gap:8px;align-items:center;width:100%;flex-wrap:wrap}
   .push{flex:1}
-  button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:#fff;padding:10px 12px;border-radius:12px;cursor:pointer}
+  button,input[type="file"]{
+    font:inherit;border:1px solid var(--line);background:var(--chip);color:#fff;
+    padding:8px 10px;border-radius:10px;cursor:pointer;height:38px
+  }
   input[type="file"]{background:var(--input-soft);color:var(--muted)}
   button.primary{border-color:transparent;background:var(--accent);color:#fff}
   button.ghost{background:transparent}
-  button.pill{border-radius:20px}
 
-  /* small helper for right-aligned little % badge */
-  .percent{font-size:12px;color:var(--muted);background:var(--chip);border:1px solid var(--line);padding:4px 8px;border-radius:999px}
-
-  @media (min-width:1100px){
-    /* Drawer open by default on large screens if you want:
-       Uncomment next line if you prefer always-open on desktop */
-    /* #drawer{display:block} */
+  /* ---------- Mobile: drawer becomes inline under video ---------- */
+  @media (max-width: 768px){
+    #drawer{
+      position:static; width:auto; height:auto; display:block;
+      margin:10px 14px 0; right:auto; top:auto; box-shadow:none;
+    }
+    #ctlToggle{display:none} /* no toggle on mobile; panel is below video */
+    #stageWrap{padding:8px 0 calc(var(--barH) + 16px)}
+    #statusWrap{padding:0 14px}
+    #canvas{max-width:100%}
   }
 </style>
 </head>
 <body>
-<header><h1>Blob Tracking</h1></header>
+<header>
+  <h1>Blob Tracking</h1>
+  <button id="ctlToggle" title="Show/Hide Controls"><span>☰</span>Controls</button>
+</header>
 
-<!-- Floating Controls button (moved to TOP-RIGHT) -->
-<button id="ctlToggle" title="Show/Hide Controls"><span class="icon">☰</span>Controls</button>
-
-<!-- Controls drawer (right side) -->
+<!-- Right drawer (desktop) / inline (mobile) -->
 <aside id="drawer">
   <!-- Section 1: Processing -->
   <section class="panel">
@@ -121,24 +147,24 @@
     </div>
   </section>
 
-  <!-- Section 2: Styling (extra spacing between Box/Line/Text; no dividers) -->
+  <!-- Section 2: Styling (extra spacing; no dividers) -->
   <section class="panel">
     <div class="grid">
-      <div class="ctl" style="margin-bottom:14px">
+      <div class="ctl" style="margin-bottom:12px">
         <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
         <input type="range" id="boxThick" min="1" max="8" value="2">
         <div class="row-inline"><span>Box Color</span><input type="color" id="colBox"><input id="hexBox" class="textbox" value="#FF0000"></div>
         <div class="row-inline"><span>Opacity</span><input type="range" id="boxOp" min="0" max="100" value="100"><span class="percent" id="boxOpVal">100%</span></div>
       </div>
 
-      <div class="ctl" style="margin-bottom:14px">
+      <div class="ctl" style="margin-bottom:12px">
         <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
         <input type="range" id="lineWidth" min="1" max="8" value="2">
         <div class="row-inline"><span>Line Color</span><input type="color" id="colLine"><input id="hexLine" class="textbox" value="#FF0000"></div>
         <div class="row-inline"><span>Opacity</span><input type="range" id="lineOp" min="0" max="100" value="100"><span class="percent" id="lineOpVal">100%</span></div>
       </div>
 
-      <div class="ctl" style="margin-bottom:10px">
+      <div class="ctl">
         <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
         <input type="range" id="textSize" min="8" max="48" value="14">
         <div class="row-inline"><span>Text Color</span><input type="color" id="colText"><input id="hexText" class="textbox" value="#EEEEEE"></div>
@@ -175,30 +201,23 @@
   <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
 </div>
 
-<!-- Bottom action bar (hideable) -->
+<!-- Compact bottom toolbar (no sections; won’t cover drawer) -->
 <div class="bar" id="bar">
   <div class="wrap">
-    <!-- Group 1: File / video controls -->
-    <div class="group">
-      <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
-      <button id="btnRestart">Restart Video</button>
-      <button id="btnPause">Pause Video</button>
-      <button id="btnReset" class="ghost">Reset Settings</button>
-    </div>
+    <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
+    <button id="btnRestart">Restart</button>
+    <button id="btnPause">Pause Video</button>
+    <button id="btnReset" class="ghost">Reset Settings</button>
 
-    <!-- Group 2: Camera controls -->
-    <div class="group">
-      <button id="btnCam" class="primary">Camera Mode</button>
-      <button id="btnSwitchCam">Switch Cam</button>
-    </div>
+    <button id="btnCam" class="primary">Camera Mode</button>
+    <button id="btnSwitchCam">Switch Cam</button>
 
     <span class="push"></span>
-
     <button id="btnSave" class="primary">Save</button>
-    <button id="btnHideBar" class="pill">Hide Bar</button>
+    <button id="btnHideBar" class="ghost">Hide Bar</button>
   </div>
 </div>
-<button class="showBar pill" id="btnShowBar">Show Bar</button>
+<button class="showBar" id="btnShowBar">Show Bar</button>
 
 <!-- status helper BEFORE OpenCV -->
 <script>
@@ -215,10 +234,11 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 (() => {
   const $=s=>document.querySelector(s);
 
-  /* ---------- UI toggles ---------- */
+  /* ---------- Header controls toggle ---------- */
   const drawer = $('#drawer');
   $('#ctlToggle').onclick = () => drawer.classList.toggle('open');
 
+  /* ---------- Bottom toolbar hide/show (pill bottom-left) ---------- */
   const bar = $('#bar');
   $('#btnHideBar').onclick = ()=> bar.classList.add('hidden');
   $('#btnShowBar').onclick = ()=> bar.classList.remove('hidden');
@@ -228,7 +248,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
   const video=$('#video'); video.muted=true; video.playsInline=true;
 
-  /* Controls */
+  /* Controls mapping */
   const c={
     scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
@@ -260,7 +280,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // Colors (defaults, rounded inputs already in CSS)
+  /* Color fields */
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -298,11 +318,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   /* OpenCV & loop */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6;
-  let stream=null;           // camera stream (single declaration)
-  let mirrorPreview=false;   // mirror while camera is on
-  let facing='user';         // 'user' | 'environment'
+  let stream=null;            // single declaration
+  let mirrorPreview=false;    // mirror only for front camera
+  let facing='user';          // 'user' | 'environment'
 
-  // color conversion const
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
     COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY === 'number') ? cv.COLOR_RGBA2GRAY : cv.COLOR_RGB2GRAY;
@@ -332,16 +351,13 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   function grabToSrc(){
     if(!src) return false;
-    bctx.drawImage(video,0,0,procW,procH); // always non-mirrored source
+    bctx.drawImage(video,0,0,procW,procH); // raw, non-mirrored feed
     const im=bctx.getImageData(0,0,procW,procH);
     src.data.set(im.data);
     return true;
   }
 
-  function withAlpha(hex, op){ // op 0..100
-    const a=Math.round(Math.max(0,Math.min(100,op))*255/100).toString(16).padStart(2,'0');
-    return hex + a;
-  }
+  function withAlpha(hex, op){ const a=Math.round(Math.max(0,Math.min(100,op))*255/100).toString(16).padStart(2,'0'); return hex + a; }
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
     ctx.globalCompositeOperation='source-over';
@@ -352,14 +368,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     const lineStyle= withAlpha(hexLine.value, +c.lineOp.value);
     const textStyle= withAlpha(hexText.value, +c.textOp.value);
 
-    if (mirrorPreview){
+    if (mirrorPreview){ /* mirror preview ONLY for front cam */
       ctx.save(); ctx.translate(canvas.width,0); ctx.scale(-1,1);
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-      if(c.showBoxes.checked){
-        ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=boxStyle;
-        boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
-      }
+      if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=boxStyle; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
       if(c.showLinks.checked){
         const pts=[...objs.values()].map(([x,y])=>({x,y}));
         const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=lineStyle;
@@ -373,12 +385,10 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
         for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
       }
       ctx.restore();
-
-      // Text (unmirrored so it reads correctly)
       if(c.showText.checked){
         ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
         for(const [id,[cx,cy]] of objs.entries()){
-          const dx = canvas.width - cx;  // mirrored x for placement
+          const dx = canvas.width - cx;  // mirrored placement
           if (c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=boxStyle; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill(); }
           const txt=(c.textMode.value==='coords')?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:c.customText.value;
           ctx.fillStyle=textStyle; ctx.fillText(txt,dx+8,cy-8);
@@ -387,13 +397,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       return;
     }
 
-    // Normal
+    // not mirrored (files & back camera)
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
-    if(c.showBoxes.checked){
-      ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=boxStyle;
-      boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
-    }
+    if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=boxStyle; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
       const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=lineStyle;
@@ -406,7 +412,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=withAlpha(hexLine.value, Math.max(0,+c.lineOp.value-10));
       for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
-
     if(c.showText.checked){
       ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
       for(const [id,[cx,cy]] of objs.entries()){
@@ -515,8 +520,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     try{
       if(stream){ stream.getTracks().forEach(t=>t.stop()); }
       const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:facing},audio:false});
-      stream=s; video.loop=false; video.onended=null; video.srcObject=s; mirrorPreview=true;
-      await video.play(); setStatus('Camera started (mirrored)');
+      stream=s; video.loop=false; video.onended=null; video.srcObject=s;
+      mirrorPreview = (facing === 'user');     // << mirror only for front cam
+      await video.play(); setStatus(mirrorPreview? 'Camera (front, mirrored)' : 'Camera (back)');
     }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
   }
 
@@ -530,7 +536,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); $('#btnPause').textContent='Resume Video'; reprocessPaused(); }
     else{ video.play(); setStatus('Playing…'); $('#btnPause').textContent='Pause Video'; if(animId===null) loop(); }
   };
-
   $('#btnReset').onclick=()=>{
     const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14,boxOp:100,lineOp:100,textOp:100};
     for(const [k,v] of Object.entries(d)){
@@ -550,7 +555,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   video.onplay = ()=> setStatus(mirrorPreview ? 'Playing (mirrored)…' : 'Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  // Graceful pause when tab hidden (helps avoid system auto-pause surprises)
   document.addEventListener('visibilitychange', ()=>{
     if(document.hidden){ if(!paused){ video.pause(); } }
     else{ if(!paused){ video.play().catch(()=>{}); } }
@@ -560,15 +564,9 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   async function getSaveWriter(suggestedName){
     if (!('showSaveFilePicker' in window)) return null; // iOS/Safari fallback
     try{
-      const handle = await showSaveFilePicker({
-        suggestedName,
-        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
-      });
+      const handle = await showSaveFilePicker({ suggestedName, types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}] });
       return await handle.createWritable();
-    }catch(err){
-      console.warn('Save picker canceled or blocked:', err);
-      return null;
-    }
+    }catch(err){ console.warn('Save picker canceled or blocked:', err); return null; }
   }
 
   $('#btnSave').addEventListener('click', async () => {
@@ -577,21 +575,19 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
     const fps = await estimateFPS(video) || 30;
     const W0=(canvas.width&~1), H0=(canvas.height&~1);
-    const suggested = `blob-tracking-${W0}x${H0}@${fps}.mp4`;
-
-    const writer = await getSaveWriter(suggested);
-    await saveViaWebCodecs(writer, suggested, fps);
+    const writer = await getSaveWriter(`blob-tracking-${W0}x${H0}@${fps}.mp4`);
+    await saveViaWebCodecs(writer, fps);
   });
 
   function chooseProfile(width,height,fps,bitrate){
     return [
-      {codec:'avc1.640028', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // High@4.0
-      {codec:'avc1.4D401F', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Main@3.1
-      {codec:'avc1.42E01E', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Baseline@3.0
+      {codec:'avc1.640028', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
+      {codec:'avc1.4D401F', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
+      {codec:'avc1.42E01E', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
     ];
   }
 
-  async function saveViaWebCodecs(writer, suggestedName, fps){
+  async function saveViaWebCodecs(writer, fps){
     const restoreLoop=video.loop, restoreTime=video.currentTime;
     const wasPaused=paused; paused=false;
     video.loop=false; video.currentTime=0;
@@ -629,8 +625,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       await driveFrames((i)=>{
         ectx.drawImage(canvas,0,0,W,H);
         const vf=new VideoFrame(encCanvas,{timestamp:Math.round(i*1e6/fps)});
-        encoder.encode(vf);
-        vf.close();
+        encoder.encode(vf); vf.close();
         if(totalFrames){
           const pct=Math.min(100, Math.round((i+1)/totalFrames*100));
           setStatus(`Saving… ${pct}% (${i+1}/${totalFrames})`);
@@ -644,7 +639,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
       const blob=new Blob([target.buffer],{type:'video/mp4'});
       if(writer){ await writer.write(blob); await writer.close(); }
-      else{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=suggestedName; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
+      else{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`blob-tracking-${W}x${H}@${fps}.mp4`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
       setStatus('Exported .mp4');
     }catch(err){
       console.error(err);
