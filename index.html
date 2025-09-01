@@ -3,193 +3,197 @@
 <head>
 <meta charset="utf-8" />
 <title>Blob Tracking</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <style>
   :root{
-    /* Dark theme / new navy accent */
-    --bg:#0F1115; --panel:#13161A; --canvas:#0E1116;
-    --fg:#ECEDEE; --muted:#A1A7B3; --line:#2A2F3A;
-    --accent:#2a3754;           /* <— updated navy */
-    --accent-press:#223048;
-    --chip:#171A20; --radius:12px;
+    --bg:#0F1115;         /* app background */
+    --panel:#13161A;      /* panels/cards */
+    --canvas:#0E1116;     /* video/canvas surface */
+    --fg:#ECEDEE;         /* primary text */
+    --muted:#A1A7B3;      /* secondary text */
+    --line:#2A2F3A;       /* borders */
+    --accent:#2a3754;     /* dark navy accent */
+    --chip:#171A20;       /* subtle chips/pills */
+    --white:#fff;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Helvetica, Arial, sans-serif}
 
-  header{
-    position:sticky;top:0;z-index:5;
-    padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel);
-    display:flex;align-items:center;gap:10px
-  }
-  h1{margin:0;font-size:18px;font-weight:600} /* semi-bold */
-  #toggleControls{
-    margin-left:auto;border:1px solid var(--line);background:var(--chip);
-    color:var(--fg);padding:8px 10px;border-radius:var(--radius);cursor:pointer
-  }
-  #toggleControls:hover{background:var(--accent-press)}
+  header{position:sticky;top:0;z-index:5;padding:10px 14px;
+    border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{margin:0;font-weight:500;font-size:18px} /* medium weight */
 
-  /* Layout: stage left, sticky controls right (collapsible) */
-  #layout{ display:grid; grid-template-columns: 1fr 390px; gap:16px; padding:12px 16px 96px; }
-  body.controls-hidden #layout{ grid-template-columns:1fr; }
-  #sidebar{ position:sticky; top:64px; max-height: calc(100vh - 120px); overflow:auto; padding-left:4px; }
-  body.controls-hidden #sidebar{ display:none; }
-  @media (max-width: 980px){
-    #layout{ grid-template-columns: 1fr; }
-    #sidebar{ position:static; max-height:none; }
-  }
-
-  .panel{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:16px;margin-bottom:12px}
-  .panel .grid{display:grid;grid-template-columns:1fr;gap:14px}
-  .ctl{display:flex;flex-direction:column;gap:8px}
-  .ctl label{color:var(--muted);font-size:13px}
-  .row-inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .row-inline span{color:var(--muted);font-size:13px;min-width:42px}
-  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
-  .group{padding-top:6px;margin-top:8px;border-top:1px dashed var(--line)}
-
-  input[type="range"]{width:100%;accent-color:var(--accent)}
-  input[type="text"], input[type="color"], select, .btn, .file-chip{ border-radius: var(--radius); }
-  input[type="color"]{
-    width:44px;height:36px;padding:0;border:1px solid var(--line);background:var(--chip);
-    appearance:none; -webkit-appearance:none; overflow:hidden; cursor:pointer;
-  }
-  input[type="text"].hex, select.mode{
-    flex:1;min-width:120px;padding:10px 12px;border:1px solid var(--line);
-    background:var(--chip);color:var(--fg)
-  }
-
-  .checkline{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
-  .checkline label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--fg)}
-
-  /* Stage */
-  #stage{min-width:0}
-  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius);max-width:min(1400px,98%);height:auto}
+  #stageWrap{padding:12px 16px calc(108px + env(safe-area-inset-bottom))}
+  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);
+    border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
 
-  /* centered status under canvas */
+  /* centered status (under video) */
   #statusWrap{display:flex;justify-content:center;margin:12px 0 18px}
-  #status{padding:8px 12px;border-radius:var(--radius);font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:240px;text-align:center}
+  #status{padding:10px 16px;border-radius:14px;font-size:14px;border:1px solid var(--line);
+    background:var(--chip);min-width:260px;text-align:center}
+
+  /* Controls drawer (hamburger) */
+  #drawerToggle{position:fixed;left:16px;top:calc(60px + env(safe-area-inset-top));
+    z-index:7;border:1px solid var(--line);background:var(--panel);color:var(--fg);
+    border-radius:10px;padding:6px 10px;cursor:pointer}
+  #drawer{position:fixed;right:0;top:0;bottom:0;width:min(460px,94vw);z-index:6;
+    background:var(--panel);border-left:1px solid var(--line);
+    transform:translateX(100%);transition:transform .25s ease}
+  #drawer.open{transform:translateX(0)}
+  #drawer header{position:sticky;top:0;padding:12px 16px;background:var(--panel)}
+  #drawer .content{padding:12px 16px 28px;overflow:auto;height:calc(100% - 48px)}
+  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+  .ctl{display:flex;flex-direction:column;gap:8px}
+  .ctl label{color:var(--muted);font-size:13px}
+  .row-inline{display:flex;align-items:center;gap:10px}
+  .row-inline span{color:var(--muted);font-size:13px;min-width:84px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
+  input[type="range"]{width:100%;accent-color:var(--accent)}
+  /* round, consistent inputs (match bottom bar file) */
+  input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--chip);cursor:pointer}
+  .textbox{flex:1;min-width:120px;padding:9px 12px;border:1px solid var(--line);
+    border-radius:12px;background:#1A1E26;color:var(--fg)}
+  select.textbox{appearance:none;background:#1A1E26 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path fill='%23A1A7B3' d='M0 0l6 8 6-8z'/></svg>") no-repeat right 10px center;background-size:12px 8px;padding-right:28px}
+  .checkline{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+  .checkline label{display:flex;align-items:center;gap:8px}
 
   /* Bottom bar */
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
-  .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:8;
+    background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.85)),var(--panel);
+    border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+    transition:transform .25s ease}
+  .bar .wrap{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .group{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--chip)}
   .push{flex:1}
-  button,.btn{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:10px 12px;border-radius:var(--radius);cursor:pointer}
-  button.primary{border-color:transparent;background:var(--accent);color:#fff}
-  button.primary:active{background:var(--accent-press)}
-  button.ghost{background:transparent}
+  .btn, .fileLabel{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);
+    padding:8px 12px;border-radius:12px;cursor:pointer}
+  .btn.primary{border-color:transparent;background:var(--accent);color:var(--white)}
+  .fileInput{display:none}
+  .fileLabel{display:inline-flex;align-items:center;gap:8px}
+  .fileLabel::before{content:"📄";opacity:.8}
+  .btn.ghost{background:transparent}
+  .bar.collapsed{transform:translateY(100%)}
 
-  /* Pretty file chooser */
-  .filewrap{display:flex;align-items:center;gap:10px}
-  #fileInput{display:none}
-  label[for="fileInput"].btn{display:inline-flex;align-items:center;gap:8px}
-  .file-chip{padding:6px 10px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
+  /* Show-controls handle when bar is hidden */
+  #barHandle{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));
+    z-index:9;background:var(--accent);color:var(--white);border:none;border-radius:999px;
+    padding:10px 14px;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;display:none}
+  #barHandle.show{display:block}
+
+  @media (max-width: 720px){
+    #stageWrap{padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Blob Tracking</h1>
-  <button id="toggleControls" title="Show/Hide controls">☰ Controls</button>
-</header>
+<header><h1>Blob Tracking</h1></header>
 
-<div id="layout">
-  <!-- Stage -->
-  <main id="stage">
-    <canvas id="canvas"></canvas>
-    <video id="video" playsinline muted></video>
-    <canvas id="buf"></canvas>
-    <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
-  </main>
+<!-- hamburger for the adjust drawer -->
+<button id="drawerToggle">☰ Controls</button>
 
-  <!-- Controls -->
-  <aside id="sidebar">
-    <!-- Processing -->
+<div id="stageWrap">
+  <canvas id="canvas"></canvas>
+  <video id="video" playsinline muted></video>
+  <canvas id="buf"></canvas>
+
+  <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
+</div>
+
+<!-- Controls drawer -->
+<aside id="drawer" aria-label="Adjustments">
+  <header><strong>Adjustments</strong></header>
+  <div class="content">
+    <!-- Section 1 Processing (threshold now before min area, scale last) -->
     <section class="panel">
       <div class="grid">
         <div class="ctl"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
         <div class="ctl"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
-        <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
         <div class="ctl"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
         <div class="ctl"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
         <div class="ctl"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
         <div class="ctl"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
         <div class="ctl"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
         <div class="ctl"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
+        <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
       </div>
     </section>
 
-    <!-- Styling -->
+    <!-- Section 2 Styling (extra spacing between box/line/text, no dividers) -->
     <section class="panel">
       <div class="grid">
-        <div class="ctl group">
+        <!-- Box -->
+        <div class="ctl" style="margin-bottom:20px">
           <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
           <input type="range" id="boxThick" min="1" max="8" value="2">
-          <div class="row-inline"><span>Box</span><input type="color" id="colBox"><input id="hexBox" class="hex" value="#FF0000"></div>
-          <div class="row-inline"><span>Opacity</span><input type="range" id="boxAlpha" min="10" max="100" value="100" style="flex:1"><span id="boxAlphaVal" class="badge">100%</span></div>
+          <div class="row-inline"><span>Box Color</span><input type="color" id="colBox"><input id="hexBox" class="textbox" value="#FF0000"></div>
+          <div class="row-inline"><span>Opacity</span><input type="range" id="boxAlpha" min="0" max="100" value="100"><span id="boxAlphaVal" class="badge">100%</span></div>
         </div>
-
-        <div class="ctl group">
+        <!-- Line -->
+        <div class="ctl" style="margin-bottom:20px">
           <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
           <input type="range" id="lineWidth" min="1" max="8" value="2">
-          <div class="row-inline"><span>Line</span><input type="color" id="colLine"><input id="hexLine" class="hex" value="#FF0000"></div>
-          <div class="row-inline"><span>Opacity</span><input type="range" id="lineAlpha" min="10" max="100" value="100" style="flex:1"><span id="lineAlphaVal" class="badge">100%</span></div>
+          <div class="row-inline"><span>Line Color</span><input type="color" id="colLine"><input id="hexLine" class="textbox" value="#FF0000"></div>
+          <div class="row-inline"><span>Opacity</span><input type="range" id="lineAlpha" min="0" max="100" value="100"><span id="lineAlphaVal" class="badge">100%</span></div>
         </div>
+        <!-- Text -->
+        <div class="ctl" style="margin-bottom:20px">
+          <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
+          <input type="range" id="textSize" min="8" max="48" value="14">
+          <div class="row-inline"><span>Text Color</span><input type="color" id="colText"><input id="hexText" class="textbox" value="#EEEEEE"></div>
+          <div class="row-inline"><span>Opacity</span><input type="range" id="textAlpha" min="0" max="100" value="100"><span id="textAlphaVal" class="badge">100%</span></div>
 
-        <div class="ctl group">
-          <label>Text</label>
-          <div class="row-inline" style="width:100%">
-            <span>Size</span><input type="range" id="textSize" min="8" max="48" value="14" style="flex:1"><span id="textSizeVal" class="badge">14</span>
-          </div>
-          <div class="row-inline"><span>Color</span><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
-          <div class="row-inline"><span>Opacity</span><input type="range" id="textAlpha" min="10" max="100" value="100" style="flex:1"><span id="textAlphaVal" class="badge">100%</span></div>
-          <div class="row-inline">
-            <span>Text Mode</span>
-            <select id="textMode" class="mode">
+          <div class="row-inline"><span>Text Mode</span>
+            <select id="labelMode" class="textbox">
               <option value="coords" selected>Coordinates</option>
-              <option value="text">Custom Text</option>
+              <option value="custom">Custom Text</option>
             </select>
           </div>
-          <input id="labelText" class="hex" placeholder="text" value="fern" disabled>
+          <input id="customText" class="textbox" placeholder="custom text (e.g., fern)" value="fern">
         </div>
       </div>
     </section>
 
-    <!-- Visibility -->
+    <!-- Section 3 Visibility -->
     <section class="panel">
-      <div class="grid">
-        <div class="ctl">
-          <label>Visibility</label>
-          <div class="checkline">
-            <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
-            <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
-            <label><input type="checkbox" id="showLinks" checked> Show Links</label>
-            <label><input type="checkbox" id="showPoints"> Show Points</label>
-            <label><input type="checkbox" id="showText" checked> Show Text</label>
-          </div>
-        </div>
+      <div class="checkline">
+        <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
+        <label><input type="checkbox" id="showCoord" checked> Show Text</label>
+        <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
+        <label><input type="checkbox" id="showLinks" checked> Show Links</label>
+        <label><input type="checkbox" id="showPoints"> Show Points</label>
       </div>
     </section>
-  </aside>
-</div>
+  </div>
+</aside>
 
-<!-- Bottom bar -->
-<div class="bar">
+<!-- Bottom action bar (hideable) -->
+<div class="bar" id="bar">
   <div class="wrap">
-    <div class="filewrap">
-      <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
-      <label class="btn" for="fileInput">Choose File</label>
-      <span id="fileName" class="file-chip">No file selected</span>
+    <!-- Files & Playback group -->
+    <div class="group">
+      <label class="fileLabel" for="fileInput">Choose File</label>
+      <input type="file" id="fileInput" class="fileInput" accept="video/mp4,video/quicktime,video/*">
+      <button id="btnRestart" class="btn">Restart Video</button>
+      <button id="btnPause" class="btn">Pause Video</button>
+      <button id="btnReset" class="btn ghost">Reset Settings</button>
     </div>
-    <button id="btnRestart">Restart Video</button>
-    <button id="btnPause">Pause Video</button>
-    <button id="btnReset" class="ghost">Reset Settings</button>
-    <button id="btnCam" class="primary">Camera Mode</button>
-    <button id="btnSwitch" disabled>Switch Camera</button>
+
+    <!-- Camera group -->
+    <div class="group">
+      <button id="btnCam" class="btn primary">Camera Mode</button>
+      <button id="btnSwitchCam" class="btn">Switch Cam</button>
+    </div>
+
     <span class="push"></span>
-    <button id="btnSave" class="primary">Save</button>
+    <button id="btnSave" class="btn primary">Save</button>
+    <button id="toggleBar" class="btn ghost">Hide Bar</button>
   </div>
 </div>
+<button id="barHandle">Show Controls</button>
 
 <!-- status helper BEFORE OpenCV -->
 <script>
@@ -207,42 +211,59 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
 (() => {
   const $=s=>document.querySelector(s);
+
+  /* ====== canvas & sources ====== */
   const canvas=$('#canvas'), ctx=canvas.getContext('2d');
   const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
   const video=$('#video'); video.muted=true; video.playsInline=true;
 
-  // hamburger toggle
-  $('#toggleControls').onclick=()=> document.body.classList.toggle('controls-hidden');
+  /* ====== drawer / hamburger ====== */
+  const drawer=$('#drawer'), drawerToggle=$('#drawerToggle');
+  drawerToggle.onclick = ()=> drawer.classList.toggle('open');
 
-  /* Controls (unchanged from previous message)… */
-  const c={ scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
+  /* ====== hideable bottom bar ====== */
+  const bar=$('#bar'), barHandle=$('#barHandle'), toggleBarBtn=$('#toggleBar');
+  const collapseBar=()=>{ bar.classList.add('collapsed'); barHandle.classList.add('show'); };
+  const expandBar=()=>{ bar.classList.remove('collapsed'); barHandle.classList.remove('show'); };
+  toggleBarBtn.onclick = collapseBar;
+  barHandle.onclick = expandBar;
+
+  /* ====== controls ====== */
+  const c={
+    scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
-    showBoxes:$('#showBoxes'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),
-    showPoints:$('#showPoints'),showText:$('#showText'),
+    showBoxes:$('#showBoxes'),showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),
     boxThick:$('#boxThick'), lineWidth:$('#lineWidth'), textSize:$('#textSize'),
-    textMode:$('#textMode'), labelText:$('#labelText'),
-    boxAlpha:$('#boxAlpha'), lineAlpha:$('#lineAlpha'), textAlpha:$('#textAlpha')
+    showPoints:$('#showPoints'),
+    boxAlpha:$('#boxAlpha'), lineAlpha:$('#lineAlpha'), textAlpha:$('#textAlpha'),
+    labelMode:$('#labelMode'), customText:$('#customText')
   };
-  const b={ scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
+  const b={
+    scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
     morphVal:$('#morphVal'),alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),
     maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal'),
     boxThickVal:$('#boxThickVal'), lineWidthVal:$('#lineWidthVal'), textSizeVal:$('#textSizeVal'),
     boxAlphaVal:$('#boxAlphaVal'), lineAlphaVal:$('#lineAlphaVal'), textAlphaVal:$('#textAlphaVal')
   };
 
-  Object.values(c).forEach(el=>{
+  // badges + handlers
+  Object.entries(c).forEach(([k,el])=>{
     if(el?.type==='range'){
-      const id=el.id+'Val'; const badge=b[id] || (el.id==='boxThick'?b.boxThickVal:el.id==='lineWidth'?b.lineWidthVal:el.id==='textSize'?b.textSizeVal:null);
-      const upd=()=>{ if(!badge) return; badge.textContent=el.id.endsWith('Alpha')?`${el.value}%`:(el.id==='alpha'?(+el.value/100).toFixed(2):el.value); };
+      const map={trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal',
+                 boxAlpha:'boxAlphaVal', lineAlpha:'lineAlphaVal', textAlpha:'textAlphaVal'};
+      const id=map[k] || (k+'Val'); const badge=b[id];
+      const upd=()=>{ if(!badge) return; badge.textContent=(k==='alpha')?(+el.value/100).toFixed(2): (k.endsWith('Alpha')? `${el.value}%` : el.value); };
       el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd();
     }else if(el?.type==='checkbox' || el?.tagName==='SELECT'){
-      el.addEventListener('change', ()=>{ if(el===c.textMode) c.labelText.disabled=(c.textMode.value!=='text'); if(paused) reprocessPaused(); });
-    }else if(el===c.labelText){ el.addEventListener('input', ()=>{ if(paused) reprocessPaused(); }); }
+      el.addEventListener('change', ()=>{ if(paused) reprocessPaused(); });
+    }else if(el===c.customText){
+      el.addEventListener('input', ()=>{ if(paused) reprocessPaused(); });
+    }
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // color bindings
+  // Color pickers
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -253,7 +274,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const colLine=$('#colLine'), hexLine=$('#hexLine'); bindColor(colLine,hexLine,'#FF0000');
   const colText=$('#colText'), hexText=$('#hexText'); bindColor(colText,hexText,'#EEEEEE');
 
-  /* Tracker */
+  /* ====== tracker ====== */
   class CentroidTracker{
     constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
     register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
@@ -271,16 +292,18 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       return this.objects;
     }
   }
-  let tracker=new CentroidTracker(+c.maxDisappear?.value||25,+c.maxDist?.value||80);
-  c.maxDisappear?.addEventListener('input',()=>tracker.maxDisappeared=+c.maxDisappear.value);
-  c.maxDist?.addEventListener('input',()=>tracker.maxDistance=+c.maxDist.value);
+  let tracker=new CentroidTracker(+c.maxDisappear.value,+c.maxDist.value);
+  c.maxDisappear.oninput=()=>tracker.maxDisappeared=+c.maxDisappear.value;
+  c.maxDist.oninput=()=>tracker.maxDistance=+c.maxDist.value;
 
   const trails=new Map();
 
-  /* OpenCV & loop */
+  /* ====== OpenCV ====== */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
-  let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;  /* stream declared ONCE here */
-  let mirrorPreview=false;
+  let animId=null, paused=false, procW=0, procH=0, scale=0.6;
+  let stream=null;            // keep single declaration
+  let mirrorPreview=false;    // mirror camera preview & overlays
+  let facing='user';          // current facingMode for phones ('user' | 'environment')
 
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
@@ -317,64 +340,95 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     return true;
   }
 
-  const hexToRGBA=(hex,a)=>{hex=hex.replace('#','');const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);a=Math.max(0,Math.min(1,a));return `rgba(${r},${g},${b},${a})`;};
-  const labelString=(cx,cy)=> c.showText.checked ? (c.textMode.value==='text' ? (c.labelText.value||'') : `${cx.toFixed(2)}, ${cy.toFixed(2)}`) : null;
+  function parseHex(hex){ // returns [r,g,b]
+    const m=/^#?([0-9a-f]{6})$/i.exec(hex||''); if(!m) return [255,255,255];
+    const n=parseInt(m[1],16); return [(n>>16)&255,(n>>8)&255,n&255];
+  }
+  const rgba=(hex,alpha01)=>{ const [r,g,b]=parseHex(hex); return `rgba(${r},${g},${b},${alpha01})`; };
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
-    const strokeBox = hexToRGBA($('#hexBox').value, (+c.boxAlpha.value)/100);
-    const strokeLine= hexToRGBA($('#hexLine').value,(+c.lineAlpha.value)/100);
-    const fillText  = hexToRGBA($('#hexText').value,(+c.textAlpha.value)/100);
-
-    ctx.globalCompositeOperation='source-over';
-    ctx.globalAlpha=1;
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    // pick opacities
+    const boxA = (+c.boxAlpha.value/100);
+    const lineA = (+c.lineAlpha.value/100);
+    const textA = (+c.textAlpha.value/100);
 
     if (mirrorPreview){
       ctx.save(); ctx.translate(canvas.width,0); ctx.scale(-1,1);
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
-      if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=strokeBox; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
+
+      if(c.showBoxes.checked){
+        ctx.lineWidth=+c.boxThick.value;
+        ctx.strokeStyle=rgba(hexBox.value, boxA);
+        boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
+      }
       if(c.showLinks.checked){
         const pts=[...objs.values()].map(([x,y])=>({x,y}));
-        const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=strokeLine;
-        for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y); if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); } }
+        const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=rgba(hexLine.value, lineA);
+        for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+          const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
+          if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
+        }
       }
       if(c.showTrail.checked && maxTrail>0){
-        ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=strokeLine;
+        ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=rgba(hexLine.value, Math.max(.2, lineA*.7));
         for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
       }
       ctx.restore();
+
+      // labels (unmirrored text)
       ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
       for(const [id,[cx,cy]] of objs.entries()){
         const dx = canvas.width - cx;
-        if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=strokeBox; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill(); }
-        const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=fillText; ctx.fillText(txt,dx+8,cy-8); }
+        if (c.showPoints.checked){
+          ctx.beginPath(); ctx.fillStyle=rgba(hexBox.value, boxA); ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill();
+        }
+        const txt = (c.labelMode.value==='custom') ? c.customText.value : `${cx.toFixed(2)}, ${cy.toFixed(2)}`;
+        if (c.showCoord.checked){ ctx.fillStyle=rgba(hexText.value, textA); ctx.fillText(txt,dx+8,cy-8); }
       }
       return;
     }
 
+    // normal draw
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=strokeBox; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
+
+    if(c.showBoxes.checked){
+      ctx.lineWidth=+c.boxThick.value;
+      ctx.strokeStyle=rgba(hexBox.value, boxA);
+      boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
+    }
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
-      const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=strokeLine;
-      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y); if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); } }
+      const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=rgba(hexLine.value, lineA);
+      for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+        const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
+        if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
+      }
     }
     if(c.showTrail.checked && maxTrail>0){
-      ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=strokeLine;
+      ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=rgba(hexLine.value, Math.max(.2, lineA*.7));
       for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
+
     ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
     for(const [id,[cx,cy]] of objs.entries()){
-      if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=strokeBox; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill(); }
-      const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=fillText; ctx.fillText(txt,cx+8,cy-8); }
+      if (c.showPoints.checked){
+        ctx.beginPath(); ctx.fillStyle=rgba(hexBox.value, boxA); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+      }
+      const txt=(c.labelMode.value==='custom')? c.customText.value : `${cx.toFixed(2)}, ${cy.toFixed(2)}`;
+      if (c.showCoord.checked){ ctx.fillStyle=rgba(hexText.value, textA); ctx.fillText(txt,cx+8,cy-8); }
     }
   }
 
   function detectOnCurrentFrame(updateTracker=true){
     cv.absdiff(blur,bg,diff);
     cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
+
     const it=+c.morph.value;
     if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
+
     contours?.delete(); hierarchy?.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
     cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
 
@@ -426,8 +480,12 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       procW=Math.max(64, Math.round(vw*scale)); procH=Math.max(36, Math.round(vh*scale));
       buf.width=procW; buf.height=procH;
 
-      ensureMats(); initColorConst();
-      grabToSrc(); cv.cvtColor(src,gray,COLOR_RGBA2GRAY); cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
+      ensureMats();
+      initColorConst();
+
+      grabToSrc();
+      cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
+      cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
 
       setStatus(`Running • ${vw}×${vh} (proc ${procW}×${procH})`);
       paused=false; loop();
@@ -448,180 +506,173 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
   }
 
-  /* Sources & Camera */
-  const fileNameEl = $('#fileName');
-  $('#fileInput').addEventListener('change', e=>{
-    const f=e.target.files[0]; fileNameEl.textContent = f? f.name : 'No file selected';
-    if(!f) return;
+  /* ====== sources & UI ====== */
+  $('#fileInput').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
     if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
     mirrorPreview=false;
-    video.srcObject=null;
     video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
     try{ URL.revokeObjectURL(video.src); }catch{}
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
-  });
-
-  const btnCam = $('#btnCam');
-  const btnSwitch = $('#btnSwitch');
-  let camFacing = 'user'; // 'user' | 'environment'
-
-  async function startCamera(facing='user'){
-    try{
-      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
-      // Prefer exact facing; fall back to ideal if needed
-      let constraints = { video:{ width:1280, height:720, facingMode: {exact:facing} }, audio:false };
-      try{
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      }catch{
-        constraints = { video:{ width:1280, height:720, facingMode: facing }, audio:false };
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      }
-      video.loop=false; video.onended=null; video.srcObject=stream;
-      mirrorPreview = (facing === 'user');
-      await video.play();
-      btnSwitch.disabled=false;
-      setStatus(`Camera started (${facing === 'user' ? 'front' : 'back'}) ${mirrorPreview ? '(mirrored)' : ''}`);
-    }catch(e){
-      console.error(e);
-      setStatus('Camera failed: '+e.message);
-      btnSwitch.disabled=true;
-    }
-  }
-
-  btnCam.onclick=async()=>{
-    try{
-      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mirrorPreview=false; video.srcObject=null; btnSwitch.disabled=true; setStatus('Camera stopped'); return; }
-      await startCamera(camFacing);
-    }catch(e){ console.error(e); setStatus('Camera error: '+e.message); }
   };
 
-  btnSwitch.onclick=async()=>{
-    camFacing = (camFacing==='user') ? 'environment' : 'user';
-    await startCamera(camFacing);
+  async function startCamera(mode=facing){
+    try{
+      if(stream){ stream.getTracks().forEach(t=>t.stop()); }
+      const constraints = {
+        video: {
+          width:{ideal:1280}, height:{ideal:720},
+          facingMode: { exact: mode }  // try preferred
+        },
+        audio: false
+      };
+      let s=null;
+      try{
+        s = await navigator.mediaDevices.getUserMedia(constraints);
+      }catch{
+        // fallback: no exact support
+        s = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      }
+      stream=s; video.loop=false; video.onended=null; video.srcObject=s; mirrorPreview=true;
+      await video.play(); setStatus(`Camera started (${mode}) — mirrored`);
+    }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
+  }
+
+  $('#btnCam').onclick=async()=>{
+    // toggle start/stop camera
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mirrorPreview=false; setStatus('Camera stopped'); $('#btnCam').textContent='Camera Mode'; }
+    else{ await startCamera(); $('#btnCam').textContent='Stop Camera'; }
+  };
+
+  $('#btnSwitchCam').onclick=async()=>{
+    facing = (facing==='user') ? 'environment' : 'user';
+    if(stream){ await startCamera(facing); }
+    else{ await startCamera(facing); $('#btnCam').textContent='Stop Camera'; }
   };
 
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
-
-  const pauseBtn=$('#btnPause');
   $('#btnPause').onclick=()=>{
     if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; }
     paused=!paused;
-    if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); pauseBtn.textContent='Resume Video'; reprocessPaused(); }
-    else{ video.play(); setStatus(mirrorPreview?'Playing (mirrored)…':'Playing…'); pauseBtn.textContent='Pause Video'; if(animId===null) loop(); }
+    if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); $('#btnPause').textContent='Resume Video'; reprocessPaused(); }
+    else{ video.play(); setStatus('Playing…'); $('#btnPause').textContent='Pause Video'; if(animId===null) loop(); }
   };
 
   $('#btnReset').onclick=()=>{
-    const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14,boxAlpha:100,lineAlpha:100,textAlpha:100};
+    const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14,
+             boxAlpha:100,lineAlpha:100,textAlpha:100};
     for(const [k,v] of Object.entries(d)){
-      const el=c[k]; if(!el) continue; el.value=v;
-      const badge = b[k+'Val'] || (k==='boxThick'?b.boxThickVal:k==='lineWidth'?b.lineWidthVal:k==='textSize'?b.textSizeVal:k==='boxAlpha'?b.boxAlphaVal:k==='lineAlpha'?b.lineAlphaVal:k==='textAlpha'?b.textAlphaVal:null);
-      if(badge){ if(k.endsWith('Alpha')) badge.textContent=v+'%'; else badge.textContent=(k==='alpha')?(v/100).toFixed(2):v; }
+      c[k].value=v;
+      const id = ({trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal',
+                   boxAlpha:'boxAlphaVal', lineAlpha:'lineAlphaVal', textAlpha:'textAlphaVal'})[k] || (k+'Val');
+      const badge=b[id]; if(badge) badge.textContent=(k==='alpha')?(v/100).toFixed(2): (k.endsWith('Alpha')? `${v}%` : v);
     }
-    $('#hexBox').value='#FF0000'; $('#colBox').value='#FF0000';
-    $('#hexLine').value='#FF0000'; $('#colLine').value='#FF0000';
-    $('#hexText').value='#EEEEEE'; $('#colText').value='#EEEEEE';
-    c.showBoxes.checked=c.showTrail.checked=c.showLinks.checked=true;
-    c.showPoints.checked=false; c.showText.checked=true;
-    c.textMode.value='coords'; c.labelText.value='fern'; c.labelText.disabled=true;
-    setStatus('Settings reset'); start();
+    hexBox.value='#FF0000'; colBox.value='#FF0000';
+    hexLine.value='#FF0000'; colLine.value='#FF0000';
+    hexText.value='#EEEEEE'; colText.value='#EEEEEE';
+    c.showBoxes.checked=c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
+    c.showPoints.checked=false;
+    c.labelMode.value='coords'; c.customText.value='fern';
+    start();
   };
 
   video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
   video.onplay = ()=> setStatus(mirrorPreview ? 'Playing (mirrored)…' : 'Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* -------- Saving: MediaRecorder (preferred) then WebCodecs fallback -------- */
-  function pickRecorderType(){
-    if(!('MediaRecorder' in window) || !canvas.captureStream) return null;
-    const candidates=[
-      'video/mp4;codecs=avc1.42E01E',
-      'video/mp4',
-      'video/webm;codecs=vp9',
-      'video/webm;codecs=vp8',
-      'video/webm'
+  /* ====== Save MP4 (WebCodecs + mp4-muxer) ====== */
+  async function getSaveWriter(suggestedName){
+    if (!('showSaveFilePicker' in window)) return null; // iOS/Safari fallback
+    try{
+      const handle = await showSaveFilePicker({
+        suggestedName,
+        types:[{description:'MP4 Video', accept:{'video/mp4':['.mp4']}}],
+      });
+      return await handle.createWritable();
+    }catch(err){
+      console.warn('Save picker canceled or blocked:', err);
+      return null;
+    }
+  }
+
+  $('#btnSave').addEventListener('click', async () => {
+    if (!video.src && !stream) { setStatus('Load a video file first'); return; }
+    if (stream) { setStatus('Export from live camera is not supported'); return; }
+
+    const fps = await estimateFPS(video) || 30;
+    const W0=(canvas.width&~1), H0=(canvas.height&~1);
+    const suggested = `blob-tracking-${W0}x${H0}@${fps}.mp4`;
+
+    const writer = await getSaveWriter(suggested);
+    await saveViaWebCodecs(writer, suggested, fps);
+  });
+
+  function chooseProfile(width,height,fps,bitrate){
+    return [
+      {codec:'avc1.640028', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // High@4.0
+      {codec:'avc1.4D401F', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Main@3.1
+      {codec:'avc1.42E01E', width, height, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'}, // Baseline@3.0
     ];
-    for(const t of candidates){ if(MediaRecorder.isTypeSupported?.(t)) return t; }
-    return null;
   }
 
-  async function saveViaMediaRecorder(){
-    const fps = await estimateFPS(video) || 30;
-    const W=canvas.width, H=canvas.height;
-    const mime = pickRecorderType();
-    if(!mime) return false;
-
+  async function saveViaWebCodecs(writer, suggestedName, fps){
     const restoreLoop=video.loop, restoreTime=video.currentTime;
-    const wasPaused=paused; paused=false; video.loop=false; video.currentTime=0; try{ await video.play(); }catch{}
+    const wasPaused=paused; paused=false;
+    video.loop=false; video.currentTime=0;
+    try{ await video.play(); }catch{}
 
-    const streamCanvas = canvas.captureStream(fps);
-    const chunks=[];
-    const opts={mimeType:mime, bitsPerSecond: Math.max(600_000, Math.round(W*H*fps*0.12))};
-    const rec=new MediaRecorder(streamCanvas,opts);
-    rec.ondataavailable=e=>{ if(e.data && e.data.size>0) chunks.push(e.data); };
-    const done=new Promise(res=>{ rec.onstop=res; });
-
-    const totalFrames = Number.isFinite(video.duration) ? Math.max(1, Math.round(video.duration*fps)) : null;
-    let i=0;
-    const tick=()=>{ if(rec.state!=='recording') return; if(video.ended){ rec.stop(); return; }
-      if(totalFrames){ const pct=Math.min(100,Math.round(++i/totalFrames*100)); setStatus(`Saving… ${pct}% (${i}/${totalFrames})`); }
-      video.requestVideoFrameCallback(()=>tick());
-    };
-
-    rec.start(1000);
-    tick();
-    await done;
-    const blob=new Blob(chunks,{type:mime.includes('mp4')?'video/mp4':'video/webm'});
-    await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.${mime.includes('mp4')?'mp4':'webm'}`);
-
-    video.loop=restoreLoop;
-    if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
-    video.currentTime=restoreTime;
-    setStatus('Exported video');
-    return true;
-  }
-
-  async function saveViaWebCodecs(){
-    if (!('VideoEncoder' in window) || !('VideoFrame' in window)) return false;
-    const fps = await estimateFPS(video) || 30;
     const W=(canvas.width&~1), H=(canvas.height&~1);
-
-    const restoreLoop=video.loop, restoreTime=video.currentTime;
-    const wasPaused=paused; paused=false; video.loop=false; video.currentTime=0; try{ await video.play(); }catch{}
+    const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H;
+    const ectx=encCanvas.getContext('2d');
 
     try{
       const bitrate = Math.max(300_000, Math.round(W*H*fps*0.10));
-      const cfgs=[
-        {codec:'avc1.640028', width:W, height:H, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
-        {codec:'avc1.4D401F', width:W, height:H, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
-        {codec:'avc1.42E01E', width:W, height:H, framerate:fps, bitrate, hardwareAcceleration:'prefer-hardware'},
-      ];
-      let cfg=null; for(const c of cfgs){ const sup=await VideoEncoder.isConfigSupported(c).catch(()=>null); if(sup?.supported){ cfg=sup.config; break; } }
-      if(!cfg) return false;
+      let cfg=null;
+      for(const c of chooseProfile(W,H,fps,bitrate)){
+        const sup = await VideoEncoder.isConfigSupported(c).catch(()=>null);
+        if(sup?.supported){ cfg=sup.config; break; }
+      }
+      if(!cfg){ setStatus('Encoder config not supported for this size; try smaller Processing Scale.'); return; }
 
       const target=new ArrayBufferTarget();
-      const muxer = new Muxer({ target, fastStart:'in-memory', firstTimestampBehavior:'offset', video:{codec:'avc',width:W,height:H,timescale:fps,frameRate:fps}});
-      const encCanvas=document.createElement('canvas'); encCanvas.width=W; encCanvas.height=H; const ectx=encCanvas.getContext('2d');
+      const muxer = new Muxer({
+        target,
+        fastStart: 'in-memory',
+        firstTimestampBehavior: 'offset',
+        video: { codec:'avc', width:W, height:H, timescale:fps, frameRate:fps }
+      });
 
-      const encoder=new VideoEncoder({ output:(chunk,meta)=>muxer.addVideoChunk(chunk,meta), error:e=>console.error(e) });
+      const encoder=new VideoEncoder({
+        output:(chunk,meta)=> muxer.addVideoChunk(chunk,meta),
+        error:e=>console.error(e)
+      });
       encoder.configure(cfg);
 
       const totalFrames = Number.isFinite(video.duration) ? Math.max(1, Math.round(video.duration*fps)) : null;
-      let i=0;
-      await new Promise(resolve=>{
-        const step=()=>{ if(video.ended){ resolve(); return; }
-          ectx.drawImage(canvas,0,0,W,H);
-          const vf=new VideoFrame(encCanvas,{timestamp:Math.round(i*1e6/fps)}); encoder.encode(vf); vf.close();
-          if(totalFrames){ const pct=Math.min(100,Math.round((++i)/totalFrames*100)); setStatus(`Saving… ${pct}% (${i}/${totalFrames})`); }
-          video.requestVideoFrameCallback(step);
-        };
-        video.requestVideoFrameCallback(step);
+
+      await driveFrames((i)=>{
+        ectx.drawImage(canvas,0,0,W,H);
+        const vf=new VideoFrame(encCanvas,{timestamp:Math.round(i*1e6/fps)});
+        encoder.encode(vf);
+        vf.close();
+        if(totalFrames){
+          const pct=Math.min(100, Math.round((i+1)/totalFrames*100));
+          setStatus(`Saving… ${pct}% (${i+1}/${totalFrames})`);
+        }else{
+          setStatus(`Saving… ${i+1} frames`);
+        }
       });
 
-      await encoder.flush(); muxer.finalize();
+      await encoder.flush();
+      muxer.finalize();
+
       const blob=new Blob([target.buffer],{type:'video/mp4'});
-      await saveBlobInteractive(blob, `blob-tracking-${W}x${H}@${fps}.mp4`);
+      if(writer){ await writer.write(blob); await writer.close(); }
+      else{ const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=suggestedName; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
       setStatus('Exported .mp4');
-      return true;
+    }catch(err){
+      console.error(err);
+      setStatus('Failed to export MP4. Keep the tab focused and try again.');
     }finally{
       video.loop=restoreLoop;
       if(wasPaused){ paused=true; video.pause(); } else { video.play().catch(()=>{}); }
@@ -629,37 +680,29 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }
   }
 
-  async function saveBlobInteractive(blob, suggestedName){
-    const canPicker = 'showSaveFilePicker' in window;
-    if(canPicker){
-      try{
-        const handle = await showSaveFilePicker({
-          suggestedName,
-          types:[{description:'Video File', accept:{[blob.type.includes('mp4')?'video/mp4':'video/webm']:[blob.type.includes('mp4')?'.mp4':'.webm']}}],
-        });
-        const w = await handle.createWritable(); await w.write(blob); await w.close();
-      }catch(e){ /* canceled */ }
-    }else{
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a'); a.href=url; a.download=suggestedName; document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url),1500);
-    }
+  function driveFrames(onEncode){
+    return new Promise(resolve=>{
+      setStatus('Saving… 0%');
+      let i = 0;
+      const step = () => {
+        if (video.ended) { resolve(); return; }
+        ensureMats();
+        if (!grabToSrc()) { resolve(); return; }
+        cv.cvtColor(src, gray, COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blur, new cv.Size(5,5), 0, 0);
+        detectOnCurrentFrame(true);
+        onEncode(i++);
+        video.requestVideoFrameCallback(step);
+      };
+      video.requestVideoFrameCallback(step);
+    });
   }
-
-  document.getElementById('btnSave').addEventListener('click', async ()=>{
-    setStatus('Preparing to save…');
-    const okRecorder = await saveViaMediaRecorder();
-    if(okRecorder) return;
-    const okWebCodecs = await saveViaWebCodecs();
-    if(okWebCodecs) return;
-    setStatus('Saving not supported on this browser.');
-  });
 
   async function estimateFPS(v){
     return new Promise(res=>{
-      if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(30);
-      let f=0,t0=null;
-      const cb=(_,meta)=>{ f++; if(t0==null) t0=meta.mediaTime; if(meta.mediaTime-t0>=1){ res(f||30); } else v.requestVideoFrameCallback(cb); };
+      if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(null);
+      let f=0, t0=null;
+      const cb=(_,meta)=>{ f++; if(t0==null) t0=meta.mediaTime; if(meta.mediaTime-t0>=1){ res(f); } else v.requestVideoFrameCallback(cb); };
       v.requestVideoFrameCallback(cb);
     });
   }
