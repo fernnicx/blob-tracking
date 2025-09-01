@@ -6,82 +6,115 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-    /* ChatGPT-ish dark theme */
+    /* ChatGPT-ish dark theme w/ dark navy accent */
     --bg:#0F1115; --panel:#13161A; --canvas:#0E1116;
     --fg:#ECEDEE; --muted:#A1A7B3; --line:#2A2F3A;
-    --accent:#C084FC; --chip:#171A20;
+    --accent:#1E2A44;          /* dark navy */
+    --accent-press:#152034;
+    --chip:#171A20; --radius:12px;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Helvetica, Arial, sans-serif}
 
-  header{position:sticky;top:0;z-index:5;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
-  h1{margin:0;font-size:18px}
-
-  /* ---------- Layout: sticky left controls, video on the right ---------- */
-  #layout{
-    display:grid;
-    grid-template-columns: 380px 1fr;
-    gap:16px;
-    padding:12px 16px 96px;
+  header{
+    position:sticky;top:0;z-index:5;
+    padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel);
+    display:flex;align-items:center;gap:10px
   }
+  h1{margin:0;font-size:18px;font-weight:600} /* semi-bold */
+  #toggleControls{
+    margin-left:auto;border:1px solid var(--line);background:var(--chip);
+    color:var(--fg);padding:8px 10px;border-radius:var(--radius);cursor:pointer
+  }
+  #toggleControls:hover{background:var(--accent-press)}
+
+  /* ---------- Layout: stage left, sticky controls right ---------- */
+  #layout{
+    display:grid; grid-template-columns: 1fr 390px; gap:16px; padding:12px 16px 96px;
+  }
+  body.controls-hidden #layout{ grid-template-columns: 1fr; }
+  #sidebar{ position:sticky; top:64px; max-height: calc(100vh - 120px); overflow:auto; padding-left:4px; }
+  body.controls-hidden #sidebar{ display:none; }
   @media (max-width: 980px){
     #layout{ grid-template-columns: 1fr; }
+    #sidebar{ position:static; max-height:none; }
   }
 
-  #sidebar{
-    position:sticky; top:64px;
-    max-height: calc(100vh - 120px);
-    overflow:auto;
-    padding-right:4px;
-  }
-
-  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;margin-bottom:12px}
+  .panel{border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);padding:16px;margin-bottom:12px}
   .panel .grid{display:grid;grid-template-columns:1fr;gap:14px}
   .ctl{display:flex;flex-direction:column;gap:8px}
   .ctl label{color:var(--muted);font-size:13px}
   .row-inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .row-inline span{color:var(--muted);font-size:13px;min-width:42px}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
+
+  /* Spacing between Box / Line / Text groups */
+  .group{padding-top:6px;margin-top:8px;border-top:1px dashed var(--line)}
+
   input[type="range"]{width:100%;accent-color:var(--accent)}
-  input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--chip);cursor:pointer}
-  input[type="text"].hex, select.mode{
-    flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--line);
-    border-radius:8px;background:var(--chip);color:var(--fg)
+  input[type="text"], input[type="color"], select, .btn, .file-chip{ border-radius: var(--radius); }
+  input[type="color"]{
+    width:44px;height:36px;padding:0;border:1px solid var(--line);background:var(--chip);
+    appearance:none; -webkit-appearance:none; overflow:hidden; cursor:pointer;
   }
+  input[type="text"].hex, select.mode{
+    flex:1;min-width:120px;padding:10px 12px;border:1px solid var(--line);
+    background:var(--chip);color:var(--fg)
+  }
+
   .checkline{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
   .checkline label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--fg)}
 
-  /* ---------- Stage (right) ---------- */
+  /* ---------- Stage (left) ---------- */
   #stage{min-width:0}
-  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98%);height:auto}
+  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius);max-width:min(1400px,98%);height:auto}
   video,#buf{display:none}
 
   /* centered status under canvas */
   #statusWrap{display:flex;justify-content:center;margin:12px 0 18px}
-  #status{padding:8px 12px;border-radius:10px;font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:240px;text-align:center}
+  #status{padding:8px 12px;border-radius:var(--radius);font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:240px;text-align:center}
 
   /* Bottom bar */
   .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.75)),var(--panel);border-top:1px solid var(--line);padding:10px 16px}
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .push{flex:1}
-  button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:8px 10px;border-radius:10px;cursor:pointer}
-  button.primary{border-color:transparent;background:var(--accent);color:#1b1026}
+  button,.btn{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:10px 12px;border-radius:var(--radius);cursor:pointer}
+  button.primary{border-color:transparent;background:var(--accent);color:#fff} /* white text on primary */
+  button.primary:active{background:var(--accent-press)}
   button.ghost{background:transparent}
+
+  /* Pretty file chooser */
+  .filewrap{display:flex;align-items:center;gap:10px}
+  #fileInput{display:none}
+  label[for="fileInput"].btn{display:inline-flex;align-items:center;gap:8px}
+  .file-chip{padding:6px 10px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
 </style>
 </head>
 <body>
-<header><h1>Blob Tracking</h1></header>
+<header>
+  <h1>Blob Tracking</h1>
+  <button id="toggleControls" title="Show/Hide controls">☰ Controls</button>
+</header>
 
 <div id="layout">
-  <!-- Left: sticky controls -->
+  <!-- Stage -->
+  <main id="stage">
+    <canvas id="canvas"></canvas>
+    <video id="video" playsinline muted></video>
+    <canvas id="buf"></canvas>
+    <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
+  </main>
+
+  <!-- Controls -->
   <aside id="sidebar">
     <!-- Processing -->
     <section class="panel">
       <div class="grid">
-        <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
-        <div class="ctl"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
+        <!-- threshold moved above min area -->
         <div class="ctl"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
+        <div class="ctl"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
+        <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
         <div class="ctl"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
         <div class="ctl"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
         <div class="ctl"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
@@ -91,39 +124,40 @@
       </div>
     </section>
 
-    <!-- Styling (Text Mode lives here near Text size/color) -->
+    <!-- Styling -->
     <section class="panel">
       <div class="grid">
-        <div class="ctl">
+        <div class="ctl group">
           <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
           <input type="range" id="boxThick" min="1" max="8" value="2">
           <div class="row-inline"><span>Box</span><input type="color" id="colBox"><input id="hexBox" class="hex" value="#FF0000"></div>
+          <div class="row-inline"><span>Opacity</span><input type="range" id="boxAlpha" min="10" max="100" value="100" style="flex:1"><span id="boxAlphaVal" class="badge">100%</span></div>
         </div>
 
-        <div class="ctl">
+        <div class="ctl group">
           <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
           <input type="range" id="lineWidth" min="1" max="8" value="2">
           <div class="row-inline"><span>Line</span><input type="color" id="colLine"><input id="hexLine" class="hex" value="#FF0000"></div>
+          <div class="row-inline"><span>Opacity</span><input type="range" id="lineAlpha" min="10" max="100" value="100" style="flex:1"><span id="lineAlphaVal" class="badge">100%</span></div>
         </div>
 
-        <div class="ctl">
+        <div class="ctl group">
           <label>Text</label>
           <div class="row-inline" style="width:100%">
             <span style="min-width:auto">Size</span>
             <input type="range" id="textSize" min="8" max="48" value="14" style="flex:1">
             <span id="textSizeVal" class="badge">14</span>
           </div>
-          <div class="row-inline">
-            <span>Color</span><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE">
-          </div>
+          <div class="row-inline"><span>Color</span><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
+          <div class="row-inline"><span>Opacity</span><input type="range" id="textAlpha" min="10" max="100" value="100" style="flex:1"><span id="textAlphaVal" class="badge">100%</span></div>
           <div class="row-inline">
             <span>Text Mode</span>
             <select id="textMode" class="mode">
               <option value="coords" selected>Coordinates</option>
               <option value="text">Custom Text</option>
             </select>
-            <input id="labelText" class="hex" placeholder="text" value="fern" disabled>
           </div>
+          <input id="labelText" class="hex" placeholder="text" value="fern" disabled>
         </div>
       </div>
     </section>
@@ -144,22 +178,18 @@
       </div>
     </section>
   </aside>
-
-  <!-- Right: stage -->
-  <main id="stage">
-    <canvas id="canvas"></canvas>
-    <video id="video" playsinline muted></video>
-    <canvas id="buf"></canvas>
-    <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
-  </main>
 </div>
 
 <!-- Bottom bar -->
 <div class="bar">
   <div class="wrap">
-    <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
+    <div class="filewrap">
+      <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
+      <label class="btn" for="fileInput">Choose File</label>
+      <span id="fileName" class="file-chip">No file selected</span>
+    </div>
     <button id="btnRestart">Restart Video</button>
-    <button id="btnPause">Pause</button>
+    <button id="btnPause">Pause Video</button>
     <button id="btnReset" class="ghost">Reset Settings</button>
     <button id="btnCam" class="primary">Camera Mode</button>
     <span class="push"></span>
@@ -187,28 +217,36 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
   const video=$('#video'); video.muted=true; video.playsInline=true;
 
+  // hamburger toggle
+  $('#toggleControls').onclick=()=> document.body.classList.toggle('controls-hidden');
+
   /* Controls */
   const c={
     scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
-    showBoxes:$('#showBoxes'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),showPoints:$('#showPoints'),
-    showText:$('#showText'),
+    showBoxes:$('#showBoxes'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),showPoints:$('#showPoints'),showText:$('#showText'),
     boxThick:$('#boxThick'), lineWidth:$('#lineWidth'), textSize:$('#textSize'),
-    textMode:$('#textMode'), labelText:$('#labelText')
+    textMode:$('#textMode'), labelText:$('#labelText'),
+    boxAlpha:$('#boxAlpha'), lineAlpha:$('#lineAlpha'), textAlpha:$('#textAlpha')
   };
   const b={
     scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
     morphVal:$('#morphVal'),alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),
     maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal'),
     boxThickVal:$('#boxThickVal'), lineWidthVal:$('#lineWidthVal'), textSizeVal:$('#textSizeVal'),
+    boxAlphaVal:$('#boxAlphaVal'), lineAlphaVal:$('#lineAlphaVal'), textAlphaVal:$('#textAlphaVal')
   };
 
   // badges + events
   Object.values(c).forEach(el=>{
     if(el?.type==='range'){
       const id=el.id+'Val'; const badge=b[id] || (el.id==='boxThick'?b.boxThickVal:el.id==='lineWidth'?b.lineWidthVal:el.id==='textSize'?b.textSizeVal:null);
-      const upd=()=>badge&&(badge.textContent=(el.id==='alpha')?(+el.value/100).toFixed(2):el.value);
+      const upd=()=>{
+        if(!badge) return;
+        if(el.id.endsWith('Alpha')) badge.textContent = `${el.value}%`;
+        else badge.textContent = (el.id==='alpha')?(+el.value/100).toFixed(2):el.value;
+      };
       el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd?.();
     }else if(el?.type==='checkbox' || el?.tagName==='SELECT'){
       el.addEventListener('change', ()=>{
@@ -296,6 +334,11 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     return true;
   }
 
+  const hexToRGBA=(hex,a)=> {
+    hex=hex.replace('#',''); const r=parseInt(hex.slice(0,2),16), g=parseInt(hex.slice(2,4),16), b=parseInt(hex.slice(4,6),16);
+    a=Math.max(0,Math.min(1,a)); return `rgba(${r},${g},${b},${a})`;
+  };
+
   function labelString(cx,cy){
     if(!c.showText.checked) return null;
     if(c.textMode.value==='text') return c.labelText.value || '';
@@ -303,6 +346,14 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   }
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
+    const boxA = (+c.boxAlpha.value)/100;
+    const lineA = (+c.lineAlpha.value)/100;
+    const textA = (+c.textAlpha.value)/100;
+
+    const strokeBox = hexToRGBA($('#hexBox').value, boxA);
+    const strokeLine = hexToRGBA($('#hexLine').value, lineA);
+    const fillText  = hexToRGBA($('#hexText').value, textA);
+
     ctx.globalCompositeOperation='source-over';
     ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -311,43 +362,43 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       ctx.save(); ctx.translate(canvas.width,0); ctx.scale(-1,1);
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
-      if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=hexBox.value; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
+      if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=strokeBox; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
       if(c.showLinks.checked){
         const pts=[...objs.values()].map(([x,y])=>({x,y}));
-        const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
+        const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=strokeLine;
         for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y); if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); } }
       }
       if(c.showTrail.checked && maxTrail>0){
-        ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
+        ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=strokeLine;
         for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
       }
       ctx.restore(); // draw text in readable orientation
 
       ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
       for(const [id,[cx,cy]] of objs.entries()){
-        const dx = canvas.width - cx;      // mirrored x
-        if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill(); }
-        const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=hexText.value; ctx.fillText(txt,dx+8,cy-8); }
+        const dx = canvas.width - cx;
+        if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=strokeBox; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill(); }
+        const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=fillText; ctx.fillText(txt,dx+8,cy-8); }
       }
       return;
     }
 
     // normal
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=hexBox.value; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
+    if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=strokeBox; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
-      const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=hexLine.value;
+      const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=strokeLine;
       for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){ const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y); if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); } }
     }
     if(c.showTrail.checked && maxTrail>0){
-      ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=hexLine.value+'90';
+      ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=strokeLine;
       for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
     ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
     for(const [id,[cx,cy]] of objs.entries()){
-      if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=hexBox.value; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill(); }
-      const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=hexText.value; ctx.fillText(txt,cx+8,cy-8); }
+      if(c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=strokeBox; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill(); }
+      const txt=labelString(cx,cy); if(txt){ ctx.fillStyle=fillText; ctx.fillText(txt,cx+8,cy-8); }
     }
   }
 
@@ -436,17 +487,20 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   }
 
   /* Sources & UI */
-  $('#fileInput').onchange=e=>{
-    const f=e.target.files[0]; if(!f) return;
+  const fileNameEl = $('#fileName');
+  $('#fileInput').addEventListener('change', e=>{
+    const f=e.target.files[0]; fileNameEl.textContent = f? f.name : 'No file selected';
+    if(!f) return;
     if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
     mirrorPreview=false;
     video.srcObject=null;
     video.loop=true; video.onended=()=>{ video.currentTime=0; video.play(); };
     try{ URL.revokeObjectURL(video.src); }catch{}
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
-  };
+  });
 
   // Camera toggle
+  let stream=null;
   $('#btnCam').onclick=async()=>{
     try{
       if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mirrorPreview=false; video.srcObject=null; setStatus('Camera stopped'); return; }
@@ -457,27 +511,29 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   };
 
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
+
+  const pauseBtn=$('#btnPause');
   $('#btnPause').onclick=()=>{
     if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; }
     paused=!paused;
-    if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); $('#btnPause').textContent='Resume'; reprocessPaused(); }
-    else{ video.play(); setStatus(mirrorPreview?'Playing (mirrored)…':'Playing…'); $('#btnPause').textContent='Pause'; if(animId===null) loop(); }
+    if(paused){ video.pause(); setStatus('Paused • tweak sliders to see preview'); pauseBtn.textContent='Resume Video'; reprocessPaused(); }
+    else{ video.play(); setStatus(mirrorPreview?'Playing (mirrored)…':'Playing…'); pauseBtn.textContent='Pause Video'; if(animId===null) loop(); }
   };
 
   $('#btnReset').onclick=()=>{
-    const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14};
+    const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14,boxAlpha:100,lineAlpha:100,textAlpha:100};
     for(const [k,v] of Object.entries(d)){
       const el=c[k]; if(!el) continue; el.value=v;
-      const badge = b[k+'Val'] || (k==='boxThick'?b.boxThickVal:k==='lineWidth'?b.lineWidthVal:k==='textSize'?b.textSizeVal:null);
-      badge && (badge.textContent=(k==='alpha')?(v/100).toFixed(2):v);
+      const badge = b[k+'Val'] || (k==='boxThick'?b.boxThickVal:k==='lineWidth'?b.lineWidthVal:k==='textSize'?b.textSizeVal:k==='boxAlpha'?b.boxAlphaVal:k==='lineAlpha'?b.lineAlphaVal:k==='textAlpha'?b.textAlphaVal:null);
+      if(badge){ if(k.endsWith('Alpha')) badge.textContent=v+'%'; else badge.textContent=(k==='alpha')?(v/100).toFixed(2):v; }
     }
-    hexBox.value='#FF0000'; colBox.value='#FF0000';
-    hexLine.value='#FF0000'; colLine.value='#FF0000';
-    hexText.value='#EEEEEE'; colText.value='#EEEEEE';
+    $('#hexBox').value='#FF0000'; $('#colBox').value='#FF0000';
+    $('#hexLine').value='#FF0000'; $('#colLine').value='#FF0000';
+    $('#hexText').value='#EEEEEE'; $('#colText').value='#EEEEEE';
     c.showBoxes.checked=c.showTrail.checked=c.showLinks.checked=true;
     c.showPoints.checked=false; c.showText.checked=true;
     c.textMode.value='coords'; c.labelText.value='fern'; c.labelText.disabled=true;
-    start();
+    setStatus('Settings reset'); start();
   };
 
   video.onloadeddata=async()=>{ window.__videoReady=true; try{ await video.play(); }catch{} setStatus('Video ready — starting…'); if(window.__cvReady) start(); };
@@ -592,7 +648,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
           types:[{description:'Video File', accept:{[blob.type.includes('mp4')?'video/mp4':'video/webm']:[blob.type.includes('mp4')?'.mp4':'.webm']}}],
         });
         const w = await handle.createWritable(); await w.write(blob); await w.close();
-      }catch(e){ /* user canceled */ }
+      }catch(e){ /* canceled */ }
     }else{
       const url=URL.createObjectURL(blob);
       const a=document.createElement('a'); a.href=url; a.download=suggestedName; document.body.appendChild(a); a.click(); a.remove();
@@ -609,7 +665,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     setStatus('Saving not supported on this browser.');
   });
 
-  /* Helpers */
   async function estimateFPS(v){
     return new Promise(res=>{
       if(!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) return res(30);
