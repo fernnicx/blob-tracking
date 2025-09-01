@@ -3,97 +3,169 @@
 <head>
 <meta charset="utf-8" />
 <title>Blob Tracking</title>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-    --bg:#0F1115;         /* app background */
-    --panel:#13161A;      /* panels/cards */
-    --canvas:#0E1116;     /* video/canvas surface */
-    --fg:#ECEDEE;         /* primary text */
-    --muted:#A1A7B3;      /* secondary text */
-    --line:#2A2F3A;       /* borders */
-    --accent:#2a3754;     /* dark navy accent */
-    --chip:#171A20;       /* subtle chips/pills */
-    --white:#fff;
+    /* ChatGPT-ish dark theme */
+    --bg:#0F1115;
+    --panel:#13161A;
+    --canvas:#0E1116;
+    --fg:#ECEDEE;
+    --muted:#A1A7B3;
+    --line:#2A2F3A;
+    --accent:#2a3754;   /* dark navy */
+    --accent-2:#344566;
+    --chip:#171A20;
+    --input:#1B2028;
+    --input-soft:#212734;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Helvetica, Arial, sans-serif}
 
-  header{position:sticky;top:0;z-index:5;padding:10px 14px;
-    border-bottom:1px solid var(--line);background:var(--panel)}
-  h1{margin:0;font-weight:500;font-size:18px} /* medium weight */
+  header{position:sticky;top:0;z-index:7;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+  h1{margin:0;font-size:18px;font-weight:600} /* semi-bold (Medium) */
 
-  #stageWrap{padding:12px 16px calc(108px + env(safe-area-inset-bottom))}
-  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);
-    border-radius:12px;max-width:min(1400px,98vw);height:auto}
+  #stageWrap{padding:12px 16px 96px}
+  #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:12px;max-width:min(1400px,98vw);height:auto}
   video,#buf{display:none}
 
-  /* centered status (under video) */
+  /* centered status */
   #statusWrap{display:flex;justify-content:center;margin:12px 0 18px}
-  #status{padding:10px 16px;border-radius:14px;font-size:14px;border:1px solid var(--line);
-    background:var(--chip);min-width:260px;text-align:center}
+  #status{padding:10px 16px;border-radius:14px;font-size:14px;border:1px solid var(--line);background:var(--chip);min-width:260px;text-align:center}
 
-  /* Controls drawer (hamburger) */
-  #drawerToggle{position:fixed;left:16px;top:calc(60px + env(safe-area-inset-top));
-    z-index:7;border:1px solid var(--line);background:var(--panel);color:var(--fg);
-    border-radius:10px;padding:6px 10px;cursor:pointer}
-  #drawer{position:fixed;right:0;top:0;bottom:0;width:min(460px,94vw);z-index:6;
-    background:var(--panel);border-left:1px solid var(--line);
-    transform:translateX(100%);transition:transform .25s ease}
-  #drawer.open{transform:translateX(0)}
-  #drawer header{position:sticky;top:0;padding:12px 16px;background:var(--panel)}
-  #drawer .content{padding:12px 16px 28px;overflow:auto;height:calc(100% - 48px)}
+  /* ---------- Controls drawer ---------- */
+  #ctlToggle{
+    position:fixed; top:14px; right:14px; z-index:8;
+    border:1px solid var(--line); background:var(--chip); color:var(--fg);
+    padding:10px 14px; border-radius:12px; cursor:pointer;
+  }
+  #ctlToggle .icon{margin-right:8px}
+  #drawer{
+    position:fixed; top:62px; right:14px; z-index:7;
+    width:min(420px,92vw); height:calc(100vh - 88px);
+    border:1px solid var(--line); background:var(--panel); border-radius:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.4);
+    overflow:auto; padding:14px; display:none;
+  }
+  #drawer.open{display:block}
   .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;margin-bottom:14px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
   .ctl{display:flex;flex-direction:column;gap:8px}
   .ctl label{color:var(--muted);font-size:13px}
   .row-inline{display:flex;align-items:center;gap:10px}
-  .row-inline span{color:var(--muted);font-size:13px;min-width:84px}
-  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
+  .row-inline span{color:var(--muted);font-size:13px;min-width:92px}
+
+  /* inputs */
   input[type="range"]{width:100%;accent-color:var(--accent)}
-  /* round, consistent inputs (match bottom bar file) */
-  input[type="color"]{width:44px;height:34px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--chip);cursor:pointer}
-  .textbox{flex:1;min-width:120px;padding:9px 12px;border:1px solid var(--line);
-    border-radius:12px;background:#1A1E26;color:var(--fg)}
-  select.textbox{appearance:none;background:#1A1E26 url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path fill='%23A1A7B3' d='M0 0l6 8 6-8z'/></svg>") no-repeat right 10px center;background-size:12px 8px;padding-right:28px}
+  input[type="color"]{
+    width:44px;height:36px;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--input);cursor:pointer
+  }
+  .textbox{
+    width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:12px;
+    background:var(--input);color:var(--fg)
+  }
+  select.textbox{appearance:none;background:var(--input) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="10" viewBox="0 0 14 10"><path fill="%23A1A7B3" d="M1 1l6 8 6-8"/></svg>') no-repeat right 10px center;padding-right:32px}
+
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
   .checkline{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
   .checkline label{display:flex;align-items:center;gap:8px}
+  input[type="checkbox"]{accent-color:var(--accent)}
 
-  /* Bottom bar */
-  .bar{position:fixed;left:0;right:0;bottom:0;z-index:8;
-    background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.85)),var(--panel);
-    border-top:1px solid var(--line);padding:10px 12px calc(10px + env(safe-area-inset-bottom));
-    transition:transform .25s ease}
-  .bar .wrap{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-  .group{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
-    padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--chip)}
+  /* ---------- Bottom bar ---------- */
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:6;background:linear-gradient(180deg,rgba(15,17,21,0),rgba(15,17,21,.78)),var(--panel);border-top:1px solid var(--line);padding:10px 16px;transition:transform .25s ease}
+  .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .bar.hidden{transform:translateY(110%)}
+  .showBar{position:fixed;right:16px;bottom:16px;z-index:6;display:none}
+  .bar.hidden + .showBar{display:block}
+
+  /* grouped actions in bar */
+  .group{display:flex;gap:10px;flex-wrap:wrap;align-items:center;border:1px solid var(--line);background:var(--chip);border-radius:12px;padding:8px 10px}
   .push{flex:1}
-  .btn, .fileLabel{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);
-    padding:8px 12px;border-radius:12px;cursor:pointer}
-  .btn.primary{border-color:transparent;background:var(--accent);color:var(--white)}
-  .fileInput{display:none}
-  .fileLabel{display:inline-flex;align-items:center;gap:8px}
-  .fileLabel::before{content:"📄";opacity:.8}
-  .btn.ghost{background:transparent}
-  .bar.collapsed{transform:translateY(100%)}
+  button,input[type="file"]{font:inherit;border:1px solid var(--line);background:var(--chip);color:#fff;padding:10px 12px;border-radius:12px;cursor:pointer}
+  input[type="file"]{background:var(--input-soft);color:var(--muted)}
+  button.primary{border-color:transparent;background:var(--accent);color:#fff}
+  button.ghost{background:transparent}
+  button.pill{border-radius:20px}
 
-  /* Show-controls handle when bar is hidden */
-  #barHandle{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom));
-    z-index:9;background:var(--accent);color:var(--white);border:none;border-radius:999px;
-    padding:10px 14px;box-shadow:0 6px 18px rgba(0,0,0,.35);cursor:pointer;display:none}
-  #barHandle.show{display:block}
+  /* small helper for right-aligned little % badge */
+  .percent{font-size:12px;color:var(--muted);background:var(--chip);border:1px solid var(--line);padding:4px 8px;border-radius:999px}
 
-  @media (max-width: 720px){
-    #stageWrap{padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+  @media (min-width:1100px){
+    /* Drawer open by default on large screens if you want:
+       Uncomment next line if you prefer always-open on desktop */
+    /* #drawer{display:block} */
   }
 </style>
 </head>
 <body>
 <header><h1>Blob Tracking</h1></header>
 
-<!-- hamburger for the adjust drawer -->
-<button id="drawerToggle">☰ Controls</button>
+<!-- Floating Controls button (moved to TOP-RIGHT) -->
+<button id="ctlToggle" title="Show/Hide Controls"><span class="icon">☰</span>Controls</button>
+
+<!-- Controls drawer (right side) -->
+<aside id="drawer">
+  <!-- Section 1: Processing -->
+  <section class="panel">
+    <div class="grid">
+      <div class="ctl"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
+      <div class="ctl"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
+      <div class="ctl"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
+      <div class="ctl"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
+      <div class="ctl"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
+      <div class="ctl"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
+      <div class="ctl"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
+      <div class="ctl"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
+      <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
+    </div>
+  </section>
+
+  <!-- Section 2: Styling (extra spacing between Box/Line/Text; no dividers) -->
+  <section class="panel">
+    <div class="grid">
+      <div class="ctl" style="margin-bottom:14px">
+        <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
+        <input type="range" id="boxThick" min="1" max="8" value="2">
+        <div class="row-inline"><span>Box Color</span><input type="color" id="colBox"><input id="hexBox" class="textbox" value="#FF0000"></div>
+        <div class="row-inline"><span>Opacity</span><input type="range" id="boxOp" min="0" max="100" value="100"><span class="percent" id="boxOpVal">100%</span></div>
+      </div>
+
+      <div class="ctl" style="margin-bottom:14px">
+        <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
+        <input type="range" id="lineWidth" min="1" max="8" value="2">
+        <div class="row-inline"><span>Line Color</span><input type="color" id="colLine"><input id="hexLine" class="textbox" value="#FF0000"></div>
+        <div class="row-inline"><span>Opacity</span><input type="range" id="lineOp" min="0" max="100" value="100"><span class="percent" id="lineOpVal">100%</span></div>
+      </div>
+
+      <div class="ctl" style="margin-bottom:10px">
+        <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
+        <input type="range" id="textSize" min="8" max="48" value="14">
+        <div class="row-inline"><span>Text Color</span><input type="color" id="colText"><input id="hexText" class="textbox" value="#EEEEEE"></div>
+        <div class="row-inline"><span>Opacity</span><input type="range" id="textOp" min="0" max="100" value="100"><span class="percent" id="textOpVal">100%</span></div>
+        <div class="row-inline">
+          <span>Text Mode</span>
+          <select id="textMode" class="textbox">
+            <option value="coords">Coordinates</option>
+            <option value="custom">Custom Text</option>
+          </select>
+        </div>
+        <input id="customText" class="textbox" placeholder="fern" value="fern" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: Visibility -->
+  <section class="panel">
+    <div class="checkline">
+      <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
+      <label><input type="checkbox" id="showText"  checked> Show Text</label>
+      <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
+      <label><input type="checkbox" id="showLinks"> Show Links</label>
+      <label><input type="checkbox" id="showPoints"> Show Points</label>
+    </div>
+  </section>
+</aside>
 
 <div id="stageWrap">
   <canvas id="canvas"></canvas>
@@ -103,105 +175,36 @@
   <div id="statusWrap"><div id="status">Loading OpenCV.js…</div></div>
 </div>
 
-<!-- Controls drawer -->
-<aside id="drawer" aria-label="Adjustments">
-  <header><strong>Adjustments</strong></header>
-  <div class="content">
-    <!-- Section 1 Processing (threshold now before min area, scale last) -->
-    <section class="panel">
-      <div class="grid">
-        <div class="ctl"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
-        <div class="ctl"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
-        <div class="ctl"><label>Morph Iterations <span id="morphVal" class="badge">2</span></label><input type="range" id="morph" min="0" max="5" value="2"></div>
-        <div class="ctl"><label>BG Learning Rate α <span id="alphaVal" class="badge">0.05</span></label><input type="range" id="alpha" min="0" max="100" value="5"></div>
-        <div class="ctl"><label>Max Track Disappeared <span id="maxDisappearVal" class="badge">25</span></label><input type="range" id="maxDisappear" min="3" max="150" value="25"></div>
-        <div class="ctl"><label>Max Match Distance (px) <span id="maxDistVal" class="badge">80</span></label><input type="range" id="maxDist" min="10" max="300" value="80"></div>
-        <div class="ctl"><label>Max Link Distance (px) <span id="linkDistVal" class="badge">180</span></label><input type="range" id="linkDist" min="10" max="600" value="180"></div>
-        <div class="ctl"><label>Trail Length (frames) <span id="trailVal" class="badge">20</span></label><input type="range" id="trailLen" min="0" max="200" value="20"></div>
-        <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
-      </div>
-    </section>
-
-    <!-- Section 2 Styling (extra spacing between box/line/text, no dividers) -->
-    <section class="panel">
-      <div class="grid">
-        <!-- Box -->
-        <div class="ctl" style="margin-bottom:20px">
-          <label>Box Thickness <span id="boxThickVal" class="badge">2</span></label>
-          <input type="range" id="boxThick" min="1" max="8" value="2">
-          <div class="row-inline"><span>Box Color</span><input type="color" id="colBox"><input id="hexBox" class="textbox" value="#FF0000"></div>
-          <div class="row-inline"><span>Opacity</span><input type="range" id="boxAlpha" min="0" max="100" value="100"><span id="boxAlphaVal" class="badge">100%</span></div>
-        </div>
-        <!-- Line -->
-        <div class="ctl" style="margin-bottom:20px">
-          <label>Line Width <span id="lineWidthVal" class="badge">2</span></label>
-          <input type="range" id="lineWidth" min="1" max="8" value="2">
-          <div class="row-inline"><span>Line Color</span><input type="color" id="colLine"><input id="hexLine" class="textbox" value="#FF0000"></div>
-          <div class="row-inline"><span>Opacity</span><input type="range" id="lineAlpha" min="0" max="100" value="100"><span id="lineAlphaVal" class="badge">100%</span></div>
-        </div>
-        <!-- Text -->
-        <div class="ctl" style="margin-bottom:20px">
-          <label>Text Size (px) <span id="textSizeVal" class="badge">14</span></label>
-          <input type="range" id="textSize" min="8" max="48" value="14">
-          <div class="row-inline"><span>Text Color</span><input type="color" id="colText"><input id="hexText" class="textbox" value="#EEEEEE"></div>
-          <div class="row-inline"><span>Opacity</span><input type="range" id="textAlpha" min="0" max="100" value="100"><span id="textAlphaVal" class="badge">100%</span></div>
-
-          <div class="row-inline"><span>Text Mode</span>
-            <select id="labelMode" class="textbox">
-              <option value="coords" selected>Coordinates</option>
-              <option value="custom">Custom Text</option>
-            </select>
-          </div>
-          <input id="customText" class="textbox" placeholder="custom text (e.g., fern)" value="fern">
-        </div>
-      </div>
-    </section>
-
-    <!-- Section 3 Visibility -->
-    <section class="panel">
-      <div class="checkline">
-        <label><input type="checkbox" id="showBoxes" checked> Show Boxes</label>
-        <label><input type="checkbox" id="showCoord" checked> Show Text</label>
-        <label><input type="checkbox" id="showTrail" checked> Show Trails</label>
-        <label><input type="checkbox" id="showLinks" checked> Show Links</label>
-        <label><input type="checkbox" id="showPoints"> Show Points</label>
-      </div>
-    </section>
-  </div>
-</aside>
-
 <!-- Bottom action bar (hideable) -->
 <div class="bar" id="bar">
   <div class="wrap">
-    <!-- Files & Playback group -->
+    <!-- Group 1: File / video controls -->
     <div class="group">
-      <label class="fileLabel" for="fileInput">Choose File</label>
-      <input type="file" id="fileInput" class="fileInput" accept="video/mp4,video/quicktime,video/*">
-      <button id="btnRestart" class="btn">Restart Video</button>
-      <button id="btnPause" class="btn">Pause Video</button>
-      <button id="btnReset" class="btn ghost">Reset Settings</button>
+      <input type="file" id="fileInput" accept="video/mp4,video/quicktime,video/*">
+      <button id="btnRestart">Restart Video</button>
+      <button id="btnPause">Pause Video</button>
+      <button id="btnReset" class="ghost">Reset Settings</button>
     </div>
 
-    <!-- Camera group -->
+    <!-- Group 2: Camera controls -->
     <div class="group">
-      <button id="btnCam" class="btn primary">Camera Mode</button>
-      <button id="btnSwitchCam" class="btn">Switch Cam</button>
+      <button id="btnCam" class="primary">Camera Mode</button>
+      <button id="btnSwitchCam">Switch Cam</button>
     </div>
 
     <span class="push"></span>
-    <button id="btnSave" class="btn primary">Save</button>
-    <button id="toggleBar" class="btn ghost">Hide Bar</button>
+
+    <button id="btnSave" class="primary">Save</button>
+    <button id="btnHideBar" class="pill">Hide Bar</button>
   </div>
 </div>
-<button id="barHandle">Show Controls</button>
+<button class="showBar pill" id="btnShowBar">Show Bar</button>
 
 <!-- status helper BEFORE OpenCV -->
 <script>
 function setStatus(text){ const el=document.getElementById('status'); if(el) el.textContent=text; else console.log('[status]',text); }
 window.__cvReady=false; window.__videoReady=false;
-window.Module = {
-  onRuntimeInitialized(){ window.__cvReady=true; setStatus('OpenCV.js ready'); if(window.__videoReady && typeof window.__start==='function') window.__start(); }
-};
+window.Module = { onRuntimeInitialized(){ window.__cvReady=true; setStatus('OpenCV.js ready'); if(window.__videoReady && typeof window.__start==='function') window.__start(); } };
 </script>
 <script src="https://docs.opencv.org/4.x/opencv.js"></script>
 
@@ -212,58 +215,52 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 (() => {
   const $=s=>document.querySelector(s);
 
-  /* ====== canvas & sources ====== */
+  /* ---------- UI toggles ---------- */
+  const drawer = $('#drawer');
+  $('#ctlToggle').onclick = () => drawer.classList.toggle('open');
+
+  const bar = $('#bar');
+  $('#btnHideBar').onclick = ()=> bar.classList.add('hidden');
+  $('#btnShowBar').onclick = ()=> bar.classList.remove('hidden');
+
+  /* ---------- Canvas / video ---------- */
   const canvas=$('#canvas'), ctx=canvas.getContext('2d');
   const buf=$('#buf'), bctx=buf.getContext('2d',{willReadFrequently:true});
   const video=$('#video'); video.muted=true; video.playsInline=true;
 
-  /* ====== drawer / hamburger ====== */
-  const drawer=$('#drawer'), drawerToggle=$('#drawerToggle');
-  drawerToggle.onclick = ()=> drawer.classList.toggle('open');
-
-  /* ====== hideable bottom bar ====== */
-  const bar=$('#bar'), barHandle=$('#barHandle'), toggleBarBtn=$('#toggleBar');
-  const collapseBar=()=>{ bar.classList.add('collapsed'); barHandle.classList.add('show'); };
-  const expandBar=()=>{ bar.classList.remove('collapsed'); barHandle.classList.remove('show'); };
-  toggleBarBtn.onclick = collapseBar;
-  barHandle.onclick = expandBar;
-
-  /* ====== controls ====== */
+  /* Controls */
   const c={
     scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
-    showBoxes:$('#showBoxes'),showCoord:$('#showCoord'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),
+    showBoxes:$('#showBoxes'),showText:$('#showText'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),showPoints:$('#showPoints'),
     boxThick:$('#boxThick'), lineWidth:$('#lineWidth'), textSize:$('#textSize'),
-    showPoints:$('#showPoints'),
-    boxAlpha:$('#boxAlpha'), lineAlpha:$('#lineAlpha'), textAlpha:$('#textAlpha'),
-    labelMode:$('#labelMode'), customText:$('#customText')
+    boxOp:$('#boxOp'), lineOp:$('#lineOp'), textOp:$('#textOp'),
+    textMode:$('#textMode'), customText:$('#customText')
   };
   const b={
     scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
     morphVal:$('#morphVal'),alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),
     maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal'),
     boxThickVal:$('#boxThickVal'), lineWidthVal:$('#lineWidthVal'), textSizeVal:$('#textSizeVal'),
-    boxAlphaVal:$('#boxAlphaVal'), lineAlphaVal:$('#lineAlphaVal'), textAlphaVal:$('#textAlphaVal')
+    boxOpVal:$('#boxOpVal'), lineOpVal:$('#lineOpVal'), textOpVal:$('#textOpVal')
   };
 
-  // badges + handlers
   Object.entries(c).forEach(([k,el])=>{
     if(el?.type==='range'){
-      const map={trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal',
-                 boxAlpha:'boxAlphaVal', lineAlpha:'lineAlphaVal', textAlpha:'textAlphaVal'};
+      const map={trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal', boxOp:'boxOpVal', lineOp:'lineOpVal', textOp:'textOpVal'};
       const id=map[k] || (k+'Val'); const badge=b[id];
-      const upd=()=>{ if(!badge) return; badge.textContent=(k==='alpha')?(+el.value/100).toFixed(2): (k.endsWith('Alpha')? `${el.value}%` : el.value); };
+      const upd=()=>badge && (badge.textContent = (k==='alpha')?(+el.value/100).toFixed(2):(k.endsWith('Op')? (el.value+'%') : el.value));
       el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd();
-    }else if(el?.type==='checkbox' || el?.tagName==='SELECT'){
+    }else if(el?.type==='checkbox'){
       el.addEventListener('change', ()=>{ if(paused) reprocessPaused(); });
-    }else if(el===c.customText){
+    }else if(el?.tagName==='SELECT' || el?.id==='customText'){
       el.addEventListener('input', ()=>{ if(paused) reprocessPaused(); });
     }
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // Color pickers
+  // Colors (defaults, rounded inputs already in CSS)
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -274,7 +271,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   const colLine=$('#colLine'), hexLine=$('#hexLine'); bindColor(colLine,hexLine,'#FF0000');
   const colText=$('#colText'), hexText=$('#hexText'); bindColor(colText,hexText,'#EEEEEE');
 
-  /* ====== tracker ====== */
+  /* Tracker */
   class CentroidTracker{
     constructor(maxDisappeared=25,maxDistance=80){this.next=1;this.objects=new Map();this.disappeared=new Map();this.maxDisappeared=maxDisappeared;this.maxDistance=maxDistance;}
     register(c){this.objects.set(this.next,c);this.disappeared.set(this.next,0);this.next++;}
@@ -298,13 +295,14 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   const trails=new Map();
 
-  /* ====== OpenCV ====== */
+  /* OpenCV & loop */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
   let animId=null, paused=false, procW=0, procH=0, scale=0.6;
-  let stream=null;            // keep single declaration
-  let mirrorPreview=false;    // mirror camera preview & overlays
-  let facing='user';          // current facingMode for phones ('user' | 'environment')
+  let stream=null;           // camera stream (single declaration)
+  let mirrorPreview=false;   // mirror while camera is on
+  let facing='user';         // 'user' | 'environment'
 
+  // color conversion const
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
     COLOR_RGBA2GRAY = (typeof cv.COLOR_RGBA2GRAY === 'number') ? cv.COLOR_RGBA2GRAY : cv.COLOR_RGB2GRAY;
@@ -334,91 +332,88 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   function grabToSrc(){
     if(!src) return false;
-    bctx.drawImage(video,0,0,procW,procH);
+    bctx.drawImage(video,0,0,procW,procH); // always non-mirrored source
     const im=bctx.getImageData(0,0,procW,procH);
     src.data.set(im.data);
     return true;
   }
 
-  function parseHex(hex){ // returns [r,g,b]
-    const m=/^#?([0-9a-f]{6})$/i.exec(hex||''); if(!m) return [255,255,255];
-    const n=parseInt(m[1],16); return [(n>>16)&255,(n>>8)&255,n&255];
+  function withAlpha(hex, op){ // op 0..100
+    const a=Math.round(Math.max(0,Math.min(100,op))*255/100).toString(16).padStart(2,'0');
+    return hex + a;
   }
-  const rgba=(hex,alpha01)=>{ const [r,g,b]=parseHex(hex); return `rgba(${r},${g},${b},${alpha01})`; };
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
-    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1;
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    // pick opacities
-    const boxA = (+c.boxAlpha.value/100);
-    const lineA = (+c.lineAlpha.value/100);
-    const textA = (+c.textAlpha.value/100);
+    const boxStyle = withAlpha(hexBox.value, +c.boxOp.value);
+    const lineStyle= withAlpha(hexLine.value, +c.lineOp.value);
+    const textStyle= withAlpha(hexText.value, +c.textOp.value);
 
     if (mirrorPreview){
       ctx.save(); ctx.translate(canvas.width,0); ctx.scale(-1,1);
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
       if(c.showBoxes.checked){
-        ctx.lineWidth=+c.boxThick.value;
-        ctx.strokeStyle=rgba(hexBox.value, boxA);
+        ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=boxStyle;
         boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
       }
       if(c.showLinks.checked){
         const pts=[...objs.values()].map(([x,y])=>({x,y}));
-        const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=rgba(hexLine.value, lineA);
+        const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=lineStyle;
         for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
           const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
           if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
         }
       }
       if(c.showTrail.checked && maxTrail>0){
-        ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=rgba(hexLine.value, Math.max(.2, lineA*.7));
+        ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=withAlpha(hexLine.value, Math.max(0,+c.lineOp.value-10));
         for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
       }
       ctx.restore();
 
-      // labels (unmirrored text)
-      ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
-      for(const [id,[cx,cy]] of objs.entries()){
-        const dx = canvas.width - cx;
-        if (c.showPoints.checked){
-          ctx.beginPath(); ctx.fillStyle=rgba(hexBox.value, boxA); ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill();
+      // Text (unmirrored so it reads correctly)
+      if(c.showText.checked){
+        ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
+        for(const [id,[cx,cy]] of objs.entries()){
+          const dx = canvas.width - cx;  // mirrored x for placement
+          if (c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=boxStyle; ctx.arc(dx,cy,4,0,Math.PI*2); ctx.fill(); }
+          const txt=(c.textMode.value==='coords')?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:c.customText.value;
+          ctx.fillStyle=textStyle; ctx.fillText(txt,dx+8,cy-8);
         }
-        const txt = (c.labelMode.value==='custom') ? c.customText.value : `${cx.toFixed(2)}, ${cy.toFixed(2)}`;
-        if (c.showCoord.checked){ ctx.fillStyle=rgba(hexText.value, textA); ctx.fillText(txt,dx+8,cy-8); }
       }
       return;
     }
 
-    // normal draw
+    // Normal
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
     if(c.showBoxes.checked){
-      ctx.lineWidth=+c.boxThick.value;
-      ctx.strokeStyle=rgba(hexBox.value, boxA);
+      ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=boxStyle;
       boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h));
     }
     if(c.showLinks.checked){
       const pts=[...objs.values()].map(([x,y])=>({x,y}));
-      const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=rgba(hexLine.value, lineA);
+      const L=+c.linkDist.value; ctx.lineWidth=+c.lineWidth.value; ctx.strokeStyle=lineStyle;
       for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
         const d=Math.hypot(pts[i].x-pts[j].x,pts[i].y-pts[j].y);
         if(d<=L){ ctx.beginPath(); ctx.moveTo(pts[i].x,pts[i].y); ctx.lineTo(pts[j].x,pts[j].y); ctx.stroke(); }
       }
     }
     if(c.showTrail.checked && maxTrail>0){
-      ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=rgba(hexLine.value, Math.max(.2, lineA*.7));
+      ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=withAlpha(hexLine.value, Math.max(0,+c.lineOp.value-10));
       for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
     }
 
-    ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
-    for(const [id,[cx,cy]] of objs.entries()){
-      if (c.showPoints.checked){
-        ctx.beginPath(); ctx.fillStyle=rgba(hexBox.value, boxA); ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill();
+    if(c.showText.checked){
+      ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
+      for(const [id,[cx,cy]] of objs.entries()){
+        if (c.showPoints.checked){ ctx.beginPath(); ctx.fillStyle=boxStyle; ctx.arc(cx,cy,4,0,Math.PI*2); ctx.fill(); }
+        const txt=(c.textMode.value==='coords')?`${cx.toFixed(2)}, ${cy.toFixed(2)}`:c.customText.value;
+        ctx.fillStyle=textStyle; ctx.fillText(txt,cx+8,cy-8);
       }
-      const txt=(c.labelMode.value==='custom')? c.customText.value : `${cx.toFixed(2)}, ${cy.toFixed(2)}`;
-      if (c.showCoord.checked){ ctx.fillStyle=rgba(hexText.value, textA); ctx.fillText(txt,cx+8,cy-8); }
     }
   }
 
@@ -506,7 +501,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
   }
 
-  /* ====== sources & UI ====== */
+  /* Sources & UI */
   $('#fileInput').onchange=e=>{
     const f=e.target.files[0]; if(!f) return;
     if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
@@ -516,39 +511,17 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
   };
 
-  async function startCamera(mode=facing){
+  async function startCamera(){
     try{
       if(stream){ stream.getTracks().forEach(t=>t.stop()); }
-      const constraints = {
-        video: {
-          width:{ideal:1280}, height:{ideal:720},
-          facingMode: { exact: mode }  // try preferred
-        },
-        audio: false
-      };
-      let s=null;
-      try{
-        s = await navigator.mediaDevices.getUserMedia(constraints);
-      }catch{
-        // fallback: no exact support
-        s = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-      }
+      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720,facingMode:facing},audio:false});
       stream=s; video.loop=false; video.onended=null; video.srcObject=s; mirrorPreview=true;
-      await video.play(); setStatus(`Camera started (${mode}) — mirrored`);
+      await video.play(); setStatus('Camera started (mirrored)');
     }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
   }
 
-  $('#btnCam').onclick=async()=>{
-    // toggle start/stop camera
-    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mirrorPreview=false; setStatus('Camera stopped'); $('#btnCam').textContent='Camera Mode'; }
-    else{ await startCamera(); $('#btnCam').textContent='Stop Camera'; }
-  };
-
-  $('#btnSwitchCam').onclick=async()=>{
-    facing = (facing==='user') ? 'environment' : 'user';
-    if(stream){ await startCamera(facing); }
-    else{ await startCamera(facing); $('#btnCam').textContent='Stop Camera'; }
-  };
+  $('#btnCam').onclick=()=> startCamera();
+  $('#btnSwitchCam').onclick=()=>{ facing = (facing==='user'?'environment':'user'); startCamera(); };
 
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
   $('#btnPause').onclick=()=>{
@@ -559,20 +532,17 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   };
 
   $('#btnReset').onclick=()=>{
-    const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14,
-             boxAlpha:100,lineAlpha:100,textAlpha:100};
+    const d={scale:60,minArea:1200,thresh:80,morph:2,alpha:5,maxDisappear:25,maxDist:80,linkDist:180,trailLen:20,boxThick:2,lineWidth:2,textSize:14,boxOp:100,lineOp:100,textOp:100};
     for(const [k,v] of Object.entries(d)){
       c[k].value=v;
-      const id = ({trailLen:'trailVal', boxThick:'boxThickVal', lineWidth:'lineWidthVal', textSize:'textSizeVal',
-                   boxAlpha:'boxAlphaVal', lineAlpha:'lineAlphaVal', textAlpha:'textAlphaVal'})[k] || (k+'Val');
-      const badge=b[id]; if(badge) badge.textContent=(k==='alpha')?(v/100).toFixed(2): (k.endsWith('Alpha')? `${v}%` : v);
+      const map={trailLen:'trailVal',boxThick:'boxThickVal',lineWidth:'lineWidthVal',textSize:'textSizeVal',boxOp:'boxOpVal',lineOp:'lineOpVal',textOp:'textOpVal'};
+      const id=map[k]||(k+'Val'); if(b[id]) b[id].textContent=(k==='alpha')?(v/100).toFixed(2):(k.endsWith('Op')? (v+'%') : v);
     }
     hexBox.value='#FF0000'; colBox.value='#FF0000';
     hexLine.value='#FF0000'; colLine.value='#FF0000';
     hexText.value='#EEEEEE'; colText.value='#EEEEEE';
-    c.showBoxes.checked=c.showCoord.checked=c.showTrail.checked=c.showLinks.checked=true;
-    c.showPoints.checked=false;
-    c.labelMode.value='coords'; c.customText.value='fern';
+    c.showBoxes.checked=true; c.showText.checked=true; c.showTrail.checked=true; c.showLinks.checked=false; c.showPoints.checked=false;
+    c.textMode.value='coords'; c.customText.value='fern';
     start();
   };
 
@@ -580,7 +550,13 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   video.onplay = ()=> setStatus(mirrorPreview ? 'Playing (mirrored)…' : 'Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* ====== Save MP4 (WebCodecs + mp4-muxer) ====== */
+  // Graceful pause when tab hidden (helps avoid system auto-pause surprises)
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden){ if(!paused){ video.pause(); } }
+    else{ if(!paused){ video.play().catch(()=>{}); } }
+  });
+
+  /* -------- Save to MP4 (WebCodecs + mp4-muxer) -------- */
   async function getSaveWriter(suggestedName){
     if (!('showSaveFilePicker' in window)) return null; // iOS/Safari fallback
     try{
