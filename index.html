@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root{
-    /* ChatGPT-ish dark theme w/ dark navy accent */
+    /* Dark theme / new navy accent */
     --bg:#0F1115; --panel:#13161A; --canvas:#0E1116;
     --fg:#ECEDEE; --muted:#A1A7B3; --line:#2A2F3A;
-    --accent:#1E2A44;          /* dark navy */
-    --accent-press:#152034;
+    --accent:#2a3754;           /* <— updated navy */
+    --accent-press:#223048;
     --chip:#171A20; --radius:12px;
   }
   *{box-sizing:border-box}
@@ -29,11 +29,9 @@
   }
   #toggleControls:hover{background:var(--accent-press)}
 
-  /* ---------- Layout: stage left, sticky controls right ---------- */
-  #layout{
-    display:grid; grid-template-columns: 1fr 390px; gap:16px; padding:12px 16px 96px;
-  }
-  body.controls-hidden #layout{ grid-template-columns: 1fr; }
+  /* Layout: stage left, sticky controls right (collapsible) */
+  #layout{ display:grid; grid-template-columns: 1fr 390px; gap:16px; padding:12px 16px 96px; }
+  body.controls-hidden #layout{ grid-template-columns:1fr; }
   #sidebar{ position:sticky; top:64px; max-height: calc(100vh - 120px); overflow:auto; padding-left:4px; }
   body.controls-hidden #sidebar{ display:none; }
   @media (max-width: 980px){
@@ -48,8 +46,6 @@
   .row-inline{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .row-inline span{color:var(--muted);font-size:13px;min-width:42px}
   .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--chip);color:var(--muted)}
-
-  /* Spacing between Box / Line / Text groups */
   .group{padding-top:6px;margin-top:8px;border-top:1px dashed var(--line)}
 
   input[type="range"]{width:100%;accent-color:var(--accent)}
@@ -66,7 +62,7 @@
   .checkline{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
   .checkline label{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--fg)}
 
-  /* ---------- Stage (left) ---------- */
+  /* Stage */
   #stage{min-width:0}
   #canvas{display:block;margin:0 auto;background:var(--canvas);border:1px solid var(--line);border-radius:var(--radius);max-width:min(1400px,98%);height:auto}
   video,#buf{display:none}
@@ -80,7 +76,7 @@
   .bar .wrap{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .push{flex:1}
   button,.btn{font:inherit;border:1px solid var(--line);background:var(--chip);color:var(--fg);padding:10px 12px;border-radius:var(--radius);cursor:pointer}
-  button.primary{border-color:transparent;background:var(--accent);color:#fff} /* white text on primary */
+  button.primary{border-color:transparent;background:var(--accent);color:#fff}
   button.primary:active{background:var(--accent-press)}
   button.ghost{background:transparent}
 
@@ -111,7 +107,6 @@
     <!-- Processing -->
     <section class="panel">
       <div class="grid">
-        <!-- threshold moved above min area -->
         <div class="ctl"><label>Threshold (0–255) <span id="threshVal" class="badge">80</span></label><input type="range" id="thresh" min="30" max="255" value="80"></div>
         <div class="ctl"><label>Min Area (px) <span id="minAreaVal" class="badge">1200</span></label><input type="range" id="minArea" min="50" max="30000" value="1200"></div>
         <div class="ctl"><label>Processing Scale (%) <span id="scaleVal" class="badge">60</span></label><input type="range" id="scale" min="30" max="100" value="60"></div>
@@ -144,9 +139,7 @@
         <div class="ctl group">
           <label>Text</label>
           <div class="row-inline" style="width:100%">
-            <span style="min-width:auto">Size</span>
-            <input type="range" id="textSize" min="8" max="48" value="14" style="flex:1">
-            <span id="textSizeVal" class="badge">14</span>
+            <span>Size</span><input type="range" id="textSize" min="8" max="48" value="14" style="flex:1"><span id="textSizeVal" class="badge">14</span>
           </div>
           <div class="row-inline"><span>Color</span><input type="color" id="colText"><input id="hexText" class="hex" value="#EEEEEE"></div>
           <div class="row-inline"><span>Opacity</span><input type="range" id="textAlpha" min="10" max="100" value="100" style="flex:1"><span id="textAlphaVal" class="badge">100%</span></div>
@@ -192,6 +185,7 @@
     <button id="btnPause">Pause Video</button>
     <button id="btnReset" class="ghost">Reset Settings</button>
     <button id="btnCam" class="primary">Camera Mode</button>
+    <button id="btnSwitch" disabled>Switch Camera</button>
     <span class="push"></span>
     <button id="btnSave" class="primary">Save</button>
   </div>
@@ -220,46 +214,35 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   // hamburger toggle
   $('#toggleControls').onclick=()=> document.body.classList.toggle('controls-hidden');
 
-  /* Controls */
-  const c={
-    scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
+  /* Controls (unchanged from previous message)… */
+  const c={ scale:$('#scale'),minArea:$('#minArea'),thresh:$('#thresh'),morph:$('#morph'),
     alpha:$('#alpha'),maxDisappear:$('#maxDisappear'),maxDist:$('#maxDist'),
     linkDist:$('#linkDist'),trailLen:$('#trailLen'),
-    showBoxes:$('#showBoxes'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),showPoints:$('#showPoints'),showText:$('#showText'),
+    showBoxes:$('#showBoxes'),showTrail:$('#showTrail'),showLinks:$('#showLinks'),
+    showPoints:$('#showPoints'),showText:$('#showText'),
     boxThick:$('#boxThick'), lineWidth:$('#lineWidth'), textSize:$('#textSize'),
     textMode:$('#textMode'), labelText:$('#labelText'),
     boxAlpha:$('#boxAlpha'), lineAlpha:$('#lineAlpha'), textAlpha:$('#textAlpha')
   };
-  const b={
-    scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
+  const b={ scaleVal:$('#scaleVal'),minAreaVal:$('#minAreaVal'),threshVal:$('#threshVal'),
     morphVal:$('#morphVal'),alphaVal:$('#alphaVal'),maxDisappearVal:$('#maxDisappearVal'),
     maxDistVal:$('#maxDistVal'),linkDistVal:$('#linkDistVal'),trailVal:$('#trailVal'),
     boxThickVal:$('#boxThickVal'), lineWidthVal:$('#lineWidthVal'), textSizeVal:$('#textSizeVal'),
     boxAlphaVal:$('#boxAlphaVal'), lineAlphaVal:$('#lineAlphaVal'), textAlphaVal:$('#textAlphaVal')
   };
 
-  // badges + events
   Object.values(c).forEach(el=>{
     if(el?.type==='range'){
       const id=el.id+'Val'; const badge=b[id] || (el.id==='boxThick'?b.boxThickVal:el.id==='lineWidth'?b.lineWidthVal:el.id==='textSize'?b.textSizeVal:null);
-      const upd=()=>{
-        if(!badge) return;
-        if(el.id.endsWith('Alpha')) badge.textContent = `${el.value}%`;
-        else badge.textContent = (el.id==='alpha')?(+el.value/100).toFixed(2):el.value;
-      };
-      el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd?.();
+      const upd=()=>{ if(!badge) return; badge.textContent=el.id.endsWith('Alpha')?`${el.value}%`:(el.id==='alpha'?(+el.value/100).toFixed(2):el.value); };
+      el.addEventListener('input', ()=>{ upd(); if(paused) reprocessPaused(); }); upd();
     }else if(el?.type==='checkbox' || el?.tagName==='SELECT'){
-      el.addEventListener('change', ()=>{
-        if(el===c.textMode){ c.labelText.disabled = (c.textMode.value!=='text'); }
-        if(paused) reprocessPaused();
-      });
-    }else if(el===c.labelText){
-      el.addEventListener('input', ()=>{ if(paused) reprocessPaused(); });
-    }
+      el.addEventListener('change', ()=>{ if(el===c.textMode) c.labelText.disabled=(c.textMode.value!=='text'); if(paused) reprocessPaused(); });
+    }else if(el===c.labelText){ el.addEventListener('input', ()=>{ if(paused) reprocessPaused(); }); }
   });
   c.scale.addEventListener('change', ()=> start());
 
-  // Colors
+  // color bindings
   function bindColor(colorEl,hexEl,defHex){
     const norm=s=>{ s=(s||'').trim(); if(!s.startsWith('#')) s='#'+s; return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():defHex; };
     colorEl.value=defHex; hexEl.value=defHex;
@@ -296,8 +279,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   /* OpenCV & loop */
   let src=null,gray=null,blur=null,bg=null,diff=null,thr=null,kernel=null,contours=null,hierarchy=null;
-  let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;
-  let mirrorPreview=false; // mirror overlays when camera on
+  let animId=null, paused=false, procW=0, procH=0, scale=0.6, stream=null;  /* stream declared ONCE here */
+  let mirrorPreview=false;
 
   let COLOR_RGBA2GRAY = null;
   function initColorConst(){
@@ -328,31 +311,19 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
 
   function grabToSrc(){
     if(!src) return false;
-    bctx.drawImage(video,0,0,procW,procH);           // always grab real orientation
+    bctx.drawImage(video,0,0,procW,procH);
     const im=bctx.getImageData(0,0,procW,procH);
     src.data.set(im.data);
     return true;
   }
 
-  const hexToRGBA=(hex,a)=> {
-    hex=hex.replace('#',''); const r=parseInt(hex.slice(0,2),16), g=parseInt(hex.slice(2,4),16), b=parseInt(hex.slice(4,6),16);
-    a=Math.max(0,Math.min(1,a)); return `rgba(${r},${g},${b},${a})`;
-  };
-
-  function labelString(cx,cy){
-    if(!c.showText.checked) return null;
-    if(c.textMode.value==='text') return c.labelText.value || '';
-    return `${cx.toFixed(2)}, ${cy.toFixed(2)}`;
-  }
+  const hexToRGBA=(hex,a)=>{hex=hex.replace('#','');const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);a=Math.max(0,Math.min(1,a));return `rgba(${r},${g},${b},${a})`;};
+  const labelString=(cx,cy)=> c.showText.checked ? (c.textMode.value==='text' ? (c.labelText.value||'') : `${cx.toFixed(2)}, ${cy.toFixed(2)}`) : null;
 
   function drawOverlayFromDetections(boxes, objs, maxTrail){
-    const boxA = (+c.boxAlpha.value)/100;
-    const lineA = (+c.lineAlpha.value)/100;
-    const textA = (+c.textAlpha.value)/100;
-
-    const strokeBox = hexToRGBA($('#hexBox').value, boxA);
-    const strokeLine = hexToRGBA($('#hexLine').value, lineA);
-    const fillText  = hexToRGBA($('#hexText').value, textA);
+    const strokeBox = hexToRGBA($('#hexBox').value, (+c.boxAlpha.value)/100);
+    const strokeLine= hexToRGBA($('#hexLine').value,(+c.lineAlpha.value)/100);
+    const fillText  = hexToRGBA($('#hexText').value,(+c.textAlpha.value)/100);
 
     ctx.globalCompositeOperation='source-over';
     ctx.globalAlpha=1;
@@ -361,7 +332,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     if (mirrorPreview){
       ctx.save(); ctx.translate(canvas.width,0); ctx.scale(-1,1);
       ctx.drawImage(video,0,0,canvas.width,canvas.height);
-
       if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=strokeBox; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
       if(c.showLinks.checked){
         const pts=[...objs.values()].map(([x,y])=>({x,y}));
@@ -372,8 +342,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
         ctx.lineWidth=Math.max(1,(+c.lineWidth.value-1)); ctx.strokeStyle=strokeLine;
         for(const arr of trails.values()){ if(arr.length<2) continue; ctx.beginPath(); ctx.moveTo(arr[0].x,arr[0].y); for(let k=1;k<arr.length;k++) ctx.lineTo(arr[k].x,arr[k].y); ctx.stroke(); }
       }
-      ctx.restore(); // draw text in readable orientation
-
+      ctx.restore();
       ctx.font=`${+c.textSize.value}px Helvetica, Arial, sans-serif`;
       for(const [id,[cx,cy]] of objs.entries()){
         const dx = canvas.width - cx;
@@ -383,7 +352,6 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       return;
     }
 
-    // normal
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
     if(c.showBoxes.checked){ ctx.lineWidth=+c.boxThick.value; ctx.strokeStyle=strokeBox; boxes.forEach(r=>ctx.strokeRect(r.x,r.y,r.w,r.h)); }
     if(c.showLinks.checked){
@@ -405,10 +373,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   function detectOnCurrentFrame(updateTracker=true){
     cv.absdiff(blur,bg,diff);
     cv.threshold(diff,thr,+c.thresh.value,255,cv.THRESH_BINARY);
-
     const it=+c.morph.value;
     if(it>0){ cv.morphologyEx(thr,thr,cv.MORPH_OPEN,kernel,new cv.Point(-1,-1),1); cv.dilate(thr,thr,kernel,new cv.Point(-1,-1),it); }
-
     contours?.delete(); hierarchy?.delete(); contours=new cv.MatVector(); hierarchy=new cv.Mat();
     cv.findContours(thr,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
 
@@ -460,12 +426,8 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
       procW=Math.max(64, Math.round(vw*scale)); procH=Math.max(36, Math.round(vh*scale));
       buf.width=procW; buf.height=procH;
 
-      ensureMats();
-      initColorConst();
-
-      grabToSrc();
-      cv.cvtColor(src,gray,COLOR_RGBA2GRAY);
-      cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
+      ensureMats(); initColorConst();
+      grabToSrc(); cv.cvtColor(src,gray,COLOR_RGBA2GRAY); cv.GaussianBlur(gray,bg,new cv.Size(5,5),0,0);
 
       setStatus(`Running • ${vw}×${vh} (proc ${procW}×${procH})`);
       paused=false; loop();
@@ -486,7 +448,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     }catch(err){ console.error(err); cancelAnimationFrame(animId); animId=null; setStatus('Loop error: '+err.message); }
   }
 
-  /* Sources & UI */
+  /* Sources & Camera */
   const fileNameEl = $('#fileName');
   $('#fileInput').addEventListener('change', e=>{
     const f=e.target.files[0]; fileNameEl.textContent = f? f.name : 'No file selected';
@@ -499,15 +461,43 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
     video.src=URL.createObjectURL(f); setStatus(`Loading file: ${f.name}`);
   });
 
-  // Camera toggle
-  let stream=null;
-  $('#btnCam').onclick=async()=>{
+  const btnCam = $('#btnCam');
+  const btnSwitch = $('#btnSwitch');
+  let camFacing = 'user'; // 'user' | 'environment'
+
+  async function startCamera(facing='user'){
     try{
-      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mirrorPreview=false; video.srcObject=null; setStatus('Camera stopped'); return; }
-      const s=await navigator.mediaDevices.getUserMedia({video:{width:1280,height:720},audio:false});
-      stream=s; video.loop=false; video.onended=null; video.srcObject=s; mirrorPreview=true;
-      await video.play(); setStatus('Camera started (mirrored)');
-    }catch(e){ console.error(e); setStatus('Camera failed: '+e.message); }
+      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+      // Prefer exact facing; fall back to ideal if needed
+      let constraints = { video:{ width:1280, height:720, facingMode: {exact:facing} }, audio:false };
+      try{
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      }catch{
+        constraints = { video:{ width:1280, height:720, facingMode: facing }, audio:false };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
+      video.loop=false; video.onended=null; video.srcObject=stream;
+      mirrorPreview = (facing === 'user');
+      await video.play();
+      btnSwitch.disabled=false;
+      setStatus(`Camera started (${facing === 'user' ? 'front' : 'back'}) ${mirrorPreview ? '(mirrored)' : ''}`);
+    }catch(e){
+      console.error(e);
+      setStatus('Camera failed: '+e.message);
+      btnSwitch.disabled=true;
+    }
+  }
+
+  btnCam.onclick=async()=>{
+    try{
+      if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; mirrorPreview=false; video.srcObject=null; btnSwitch.disabled=true; setStatus('Camera stopped'); return; }
+      await startCamera(camFacing);
+    }catch(e){ console.error(e); setStatus('Camera error: '+e.message); }
+  };
+
+  btnSwitch.onclick=async()=>{
+    camFacing = (camFacing==='user') ? 'environment' : 'user';
+    await startCamera(camFacing);
   };
 
   $('#btnRestart').onclick=()=>{ if(!window.__videoReady){ setStatus('Load a video or start camera first'); return; } video.currentTime=0; video.play(); start(); };
@@ -540,7 +530,7 @@ import { Muxer, ArrayBufferTarget } from './libs/mp4-muxer.esm.js';
   video.onplay = ()=> setStatus(mirrorPreview ? 'Playing (mirrored)…' : 'Playing…');
   video.onerror = ()=> setStatus('Video cannot play (codec?)');
 
-  /* -------- Saving (MediaRecorder preferred, WebCodecs fallback) -------- */
+  /* -------- Saving: MediaRecorder (preferred) then WebCodecs fallback -------- */
   function pickRecorderType(){
     if(!('MediaRecorder' in window) || !canvas.captureStream) return null;
     const candidates=[
